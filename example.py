@@ -1,6 +1,7 @@
 import attr
 import datacli
 
+
 @attr.s(auto_attribs=True, frozen=True)
 class Foo:
     a: int

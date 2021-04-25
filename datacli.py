@@ -7,8 +7,7 @@ import collections
 import pathlib
 
 import attr
-import cattr # type: ignore
-
+import cattr  # type: ignore
 
 
 T = TypeVar("T")
@@ -37,8 +36,8 @@ class Arguments:
         positional = []
         while i < len(args):
             arg = args[i]
-            if arg[:2] == '--':
-                keyword[arg[2:]] = args[i+1]
+            if arg[:2] == "--":
+                keyword[arg[2:]] = args[i + 1]
                 i += 2
             else:
                 positional.append(arg)
@@ -47,6 +46,7 @@ class Arguments:
 
     def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         return self.keyword.get(key, default)
+
 
 @attr.s(auto_attribs=True, frozen=True)
 class ConfigFiles:
@@ -83,12 +83,14 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
 def find_obj(t: Type[T], source: Source, prefix: List[str] = []):
     if not attr.has(t):
         raise ValueError(f"{t} is not an attrs class")
+
     def find(field):
         if field.type is None:
             raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
         return find_value(field.name, field.type, source, prefix)
+
     d: dict = {field.name: find(field) for field in attr.fields(t)}
-    return t(**d) # type: ignore
+    return t(**d)  # type: ignore
 
 
 def find_value(name, t: Type[T], source: Source, prefix: List[str] = []) -> T:
@@ -96,7 +98,7 @@ def find_value(name, t: Type[T], source: Source, prefix: List[str] = []) -> T:
     if attr.has(t):
         return find_obj(t, source, prefix)
     prefixed_name = ".".join(prefix)
-    value = source .get(prefixed_name)
+    value = source.get(prefixed_name)
     if value is None:
         value = os.environ.get(prefixed_name)
 
@@ -118,8 +120,7 @@ def arg_unused(parts: List[str], t: Type[T]) -> bool:
 
 
 def check_unused(args: Arguments, t: Type[T]) -> List[str]:
-    return [arg for arg in args.keyword.keys() if arg_unused(arg.split('.'), t)]
-
+    return [arg for arg in args.keyword.keys() if arg_unused(arg.split("."), t)]
 
 
 def clidata(t: Type[T]) -> T:
@@ -131,5 +132,3 @@ def clidata(t: Type[T]) -> T:
         sys.exit(1)
     source = Source(args, config_files)
     return find_obj(t, source)
-
-
