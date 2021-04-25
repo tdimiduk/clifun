@@ -72,7 +72,30 @@ def find_value(name, t: Type[T], args: Arguments, prefix: List[str] = []) -> T:
     return interpret_string(value, t)
 
 
+def unused(parts: List[str], t: Type[T]) -> bool:
+    fields_dict = attr.fields_dict(t)
+    if parts[0] not in fields_dict:
+        return True
+    elif len(parts) == 1:
+        return False
+    child_type = fields_dict[parts[0]].type
+    if child_type is None:
+        raise ValueError(f"Missing type annotation for field {child_type} of {t}")
+    return unused(parts[1:], child_type)
+
+
+def check_unused(args: Arguments, t: Type[T]) -> List[str]:
+
+    return [arg for arg in args.keyword.keys() if unused(arg.split('.'), t)]
+
+
+
 def clidata(t: Type[T]) -> T:
-    return find_obj(t, Arguments.from_argv())
+    args = Arguments.from_argv()
+    unknown = check_unused(args, t)
+    if unknown:
+        print(f"Unknown arguments: {unknown}")
+        sys.exit(1)
+    return find_obj(t, args)
 
 
