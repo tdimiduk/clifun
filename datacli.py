@@ -1,27 +1,13 @@
 import argparse
+import sys
 import json
 import os
-from typing import Set, Type, TypeVar
+from typing import Set, Type, TypeVar, List, Optional, Dict
+import collections
 
 import attr
-import cattr
+import cattr # type: ignore
 
-
-@attr.s(auto_attribs=True, frozen=True)
-class Foo:
-    a: int
-    b: str
-
-
-def make_parser(c: Type) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
-    for field in attr.fields(c):
-        parser.add_argument(f"--{field.name}")
-    return parser
-
-
-def parse(c: Type) -> dict:
-    return vars(make_parser(c).parse_args())
 
 
 T = TypeVar("T")
@@ -38,29 +24,55 @@ def interpret_string(s: str, t: Type[T]) -> T:
         raise Exception(f"Could not interpret {s} as type {t}")
 
 
-def datacli(c: Type[T]) -> T:
-    args = parse(c)
-    missing: Set[str] = set()
-    missing_type: Set[str] = set()
-    for field in attr.fields(c):
-        if field.type is None:
-            missing_type.add(field.name)
-        else:
-            if args[field.name] is None:
-                args[field.name] = os.environ.get(field.name, field.default)
-            if args[field.name] == attr.NOTHING:
-                missing.add(field.name)
+@attr.s(auto_attribs=True, frozen=True)
+class Arguments:
+    positional: List[str]
+    keyword: Dict[str, str]
+
+    @classmethod
+    def from_argv(cls, args: List[str] = sys.argv) -> "Arguments":
+        i = 1
+        keyword = {}
+        positional = []
+        while i < len(args):
+            arg = args[i]
+            if arg[:2] == '--':
+                keyword[arg[2:]] = args[i+1]
+                i += 2
             else:
-                args[field.name] = interpret_string(args[field.name], field.type)
+                positional.append(arg)
+                i += 1
+        return cls(positional, keyword)
 
-    if missing_type:
-        raise Exception("All fields in cli class must have type signatures. Type signatures are missing for {missing_type}")
+    def get(self, key: str) -> Optional[str]:
+        return self.keyword.get(key)
 
-    if missing:
-        raise Exception(f"Missing arguments: {missing}")
+def find_obj(t: Type[T], args: Arguments, prefix: List[str] = []):
+    if not attr.has(t):
+        raise ValueError(f"{t} is not an attrs class")
+    def find(field):
+        if field.type is None:
+            raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
+        return find_value(field.name, field.type, args, prefix)
+    d: dict = {field.name: find(field) for field in attr.fields(t)}
+    return t(**d) # type: ignore
 
-    return c(**args) #type: ignore
+
+def find_value(name, t: Type[T], args: Arguments, prefix: List[str] = []) -> T:
+    parts = prefix + [name]
+    if attr.has(t):
+        return find_obj(t, args, parts)
+    prefixed_name = ".".join(parts)
+    value = args.get(prefixed_name)
+    if value is None:
+        value = os.environ.get(prefixed_name)
+
+    if value is None:
+        raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
+    return interpret_string(value, t)
 
 
-if __name__ == "__main__":
-    print(datacli(Foo))
+def clidata(t: Type[T]) -> T:
+    return find_obj(t, Arguments.from_argv())
+
+
