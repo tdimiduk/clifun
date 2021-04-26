@@ -8,6 +8,11 @@ class Foo:
     b: str
 
 
+@attr.s(auto_attribs=True, frozen=True)
+class Bar:
+    f: Foo
+    c: int
+
 
 if __name__ == "__main__":
-    print(datacli.clidata(Foo))
+    print(datacli.clidata(Bar))

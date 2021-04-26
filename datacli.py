@@ -66,7 +66,7 @@ class Source:
     from_env: bool = True
 
     def get(self, key: str) -> Optional[str]:
-        env_value = os.environ.get(key) if self.from_env else None
+        env_value = os.environ.get(key.upper()) if self.from_env else None
         return self.args.get(key, self.config_files.get(key, env_value))
 
 
@@ -116,7 +116,7 @@ def arg_unused(parts: List[str], t: Type[T]) -> bool:
     child_type = fields_dict[parts[0]].type
     if child_type is None:
         raise ValueError(f"Missing type annotation for field {child_type} of {t}")
-    return unused(parts[1:], child_type)
+    return arg_unused(parts[1:], child_type)
 
 
 def check_unused(args: Arguments, t: Type[T]) -> List[str]:
