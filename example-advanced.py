@@ -1,3 +1,5 @@
+from typing import Optional
+
 import attr
 import datacli
 
@@ -5,7 +7,7 @@ import datacli
 @attr.s(auto_attribs=True, frozen=True)
 class Foo:
     a: int
-    b: str
+    b: Optional[str] = None
 
 
 @attr.s(auto_attribs=True, frozen=True)

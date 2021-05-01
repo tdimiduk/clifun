@@ -31,7 +31,9 @@ class Arguments:
     help: bool = False
 
     @classmethod
-    def from_argv(cls, args: List[str] = sys.argv) -> "Arguments":
+    def from_argv(cls, args: Optional[List[str]] = None) -> "Arguments":
+        if args is None:
+            args = sys.argv
         i = 1
         keyword = {}
         positional = []
@@ -90,22 +92,22 @@ def find_obj(t: Type[T], source: Source, prefix: List[str] = []):
     def find(field):
         if field.type is None:
             raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
-        return find_value(field.name, field.type, source, prefix)
+        return find_value(field.name, field.type, field.default, source, prefix)
 
     d: dict = {field.name: find(field) for field in attr.fields(t)}
     return t(**d)  # type: ignore
 
 
-def find_value(name, t: Type[T], source: Source, prefix: List[str] = []) -> T:
+def find_value(name, t: Type[T], default, source: Source,  prefix: List[str] = []) -> T:
     prefix = prefix + [name]
     if attr.has(t):
         return find_obj(t, source, prefix)
     prefixed_name = ".".join(prefix)
     value = source.get(prefixed_name)
     if value is None:
-        value = os.environ.get(prefixed_name)
+        value = os.environ.get(prefixed_name, default)
 
-    if value is None:
+    if value is None and default is not None:
         raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
     return interpret_string(value, t)
 
@@ -129,16 +131,28 @@ def describe(t: Type[T]) -> Dict[str, Union[str, dict]]:
     def desc(t):
         if attr.has(t):
             return describe(t)
+        # Python 3.6 compatable check for Optional
+        if Union[t, None] == t:
+            types = set(t.__args__) - {type(None)}
+            types_str = ", ".join(t.__name__ for t in types)
+            return f"Optional[{types_str}]"
         return str(t.__name__)
     return {f.name: desc(f.type) for f in attr.fields(t)}
 
+def print_argument_descriptions(d: dict, prefix: List[str] = []) -> None:
+    for key, value in d.items():
+        namelist = prefix + [key]
+        if isinstance(value, dict):
+            print_argument_descriptions(value, namelist)
+        else:
+            name = ".".join(namelist)
+            print(f" --{name}: {value}")
 
-def clidata(t: Type[T]) -> T:
-    args =  Arguments.from_argv()
+def clidata(t: Type[T], args: Optional[List[str]] = None) -> T:
+    args = Arguments.from_argv(args)
     if args.help:
         print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
-        for key, value in describe(t).items():
-            print(f"  --{key}: {value}")
+        print_argument_descriptions(describe(t))
         sys.exit(0)
     config_files = load_config_files(args.positional)
     unknown = check_unused(args, t)
