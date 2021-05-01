@@ -1,4 +1,5 @@
 from typing import Optional
+import datetime as dt
 
 import attr
 import datacli
@@ -6,7 +7,7 @@ import datacli
 
 @attr.s(auto_attribs=True, frozen=True)
 class Foo:
-    a: int
+    a: dt.datetime
     b: Optional[str] = None
 
 

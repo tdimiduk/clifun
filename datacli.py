@@ -2,26 +2,38 @@ import argparse
 import sys
 import json
 import os
-from typing import Set, Type, TypeVar, List, Optional, Dict, Union
+from typing import Any, Set, Type, TypeVar, List, Optional, Dict, Union, Callable
 import collections
 import pathlib
+import datetime as dt
 
 import attr
-import cattr  # type: ignore
 
-
+S = TypeVar("S")
 T = TypeVar("T")
+InterpretString = Callable[[Optional[str]], S]
 
+def inhabits(v: Any, t: Type[T]) -> bool:
+    return Union[type(v), t] == t
 
-def interpret_string(s: str, t: Type[T]) -> T:
+def is_optional(t: Type[T]) -> bool:
+    return Union[t, None] == t
+
+def default_interpret_string(s: Optional[str], t: Type[T]) -> T:
+    if s is None and inhabits(s, t):
+        return s
     try:
-        return cattr.structure(s, t)
-    except:
+        return t(s)
+    except TypeError:
         pass
-    try:
-        return cattr.structure(json.loads(s), t)
-    except:
-        raise Exception(f"Could not interpret {s} as type {t}")
+    if t == dt.datetime:
+        if hasattr(dt.datetime, 'fromisoformat'):
+            return dt.datetime.fromisoformat(s)
+        # for python 3.6 where `fromisoformat` doesn't exist
+        import isodate
+        return isodate.parse_datetime(t)
+
+    raise Exception(f"Could not interpret {s} as type {t}")
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -85,23 +97,23 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
     return ConfigFiles([load(name) for name in filenames[::-1]])
 
 
-def find_obj(t: Type[T], source: Source, prefix: List[str] = []):
+def find_obj(t: Type[T], source: Source, interpret_string: InterpretString, prefix: List[str] = []):
     if not attr.has(t):
         raise ValueError(f"{t} is not an attrs class")
 
     def find(field):
         if field.type is None:
             raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
-        return find_value(field.name, field.type, field.default, source, prefix)
+        return find_value(name=field.name, t=field.type, default=field.default, source=source, interpret_string=interpret_string, prefix=prefix)
 
     d: dict = {field.name: find(field) for field in attr.fields(t)}
     return t(**d)  # type: ignore
 
 
-def find_value(name, t: Type[T], default, source: Source,  prefix: List[str] = []) -> T:
+def find_value(name, t: Type[T], default, source: Source, interpret_string: InterpretString,  prefix: List[str] = []) -> T:
     prefix = prefix + [name]
     if attr.has(t):
-        return find_obj(t, source, prefix)
+        return find_obj(t=t, source=source, interpret_string=interpret_string, prefix=prefix)
     prefixed_name = ".".join(prefix)
     value = source.get(prefixed_name)
     if value is None:
@@ -131,8 +143,7 @@ def describe(t: Type[T]) -> Dict[str, Union[str, dict]]:
     def desc(t):
         if attr.has(t):
             return describe(t)
-        # Python 3.6 compatable check for Optional
-        if Union[t, None] == t:
+        if is_optional(t):
             types = set(t.__args__) - {type(None)}
             types_str = ", ".join(t.__name__ for t in types)
             return f"Optional[{types_str}]"
@@ -148,7 +159,7 @@ def print_argument_descriptions(d: dict, prefix: List[str] = []) -> None:
             name = ".".join(namelist)
             print(f" --{name}: {value}")
 
-def clidata(t: Type[T], args: Optional[List[str]] = None) -> T:
+def clidata(t: Type[T], args: Optional[List[str]] = None, interpret_string: InterpretString = default_interpret_string) -> T:
     args = Arguments.from_argv(args)
     if args.help:
         print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
@@ -160,4 +171,4 @@ def clidata(t: Type[T], args: Optional[List[str]] = None) -> T:
         print(f"Unknown arguments: {unknown}")
         sys.exit(1)
     source = Source(args, config_files)
-    return find_obj(t, source)
+    return find_obj(t=t, source=source, interpret_string=interpret_string)
