@@ -13,6 +13,9 @@ class Bar:
     f: Foo
     c: int
 
+def my_program(data: Bar):
+    print(data)
 
 if __name__ == "__main__":
-    print(datacli.clidata(Bar))
+    bar = datacli.build(Bar)
+    my_program(bar)

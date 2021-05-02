@@ -2,9 +2,10 @@ import argparse
 import sys
 import json
 import os
-from typing import Set, Type, TypeVar, List, Optional, Dict
+from typing import Set, Type, TypeVar, List, Optional, Dict, Callable, Iterable
 import collections
 import pathlib
+import inspect
 
 import attr
 import cattr  # type: ignore
@@ -36,8 +37,11 @@ class Arguments:
         positional = []
         while i < len(args):
             arg = args[i]
+            key = arg[2:]
             if arg[:2] == "--":
-                keyword[arg[2:]] = args[i + 1]
+                if len(args) < i+2:
+                    raise ValueError(f"Missing value for argument: {key}")
+                keyword[key] = args[i + 1]
                 i += 2
             else:
                 positional.append(arg)
@@ -68,6 +72,11 @@ class Source:
     def get(self, key: str) -> Optional[str]:
         env_value = os.environ.get(key.upper()) if self.from_env else None
         return self.args.get(key, self.config_files.get(key, env_value))
+
+    @classmethod
+    def from_argv(cls, args: List[str] = sys.argv) -> "Source":
+        args = Arguments.from_argv(args)
+        return cls(args, load_config_files(args.positional))
 
 
 def load_config_files(filenames: List[str]) -> ConfigFiles:
@@ -119,16 +128,34 @@ def arg_unused(parts: List[str], t: Type[T]) -> bool:
     return arg_unused(parts[1:], child_type)
 
 
-def check_unused(args: Arguments, t: Type[T]) -> List[str]:
-    return [arg for arg in args.keyword.keys() if arg_unused(arg.split("."), t)]
+def check_unused(arg_names: Iterable[str], t: Type[T]) -> Set[str]:
+    return {arg for arg in arg_names if arg_unused(arg.split("."), t)}
 
 
-def clidata(t: Type[T]) -> T:
-    args = Arguments.from_argv()
-    config_files = load_config_files(args.positional)
-    unknown = check_unused(args, t)
+def build(t: Type[T]) -> T:
+    source = Source.from_argv()
+    unknown = check_unused(source.args.keyword.keys(), t)
     if unknown:
         print(f"Unknown arguments: {unknown}")
         sys.exit(1)
-    source = Source(args, config_files)
     return find_obj(t, source)
+
+
+def run_function(c: Callable[...,T]) -> T:
+    source = Source.from_argv()
+    def find(name: str, t: Type[T]) -> T:
+        if attr.has(t):
+            return find_obj(t, source)
+        else:
+            return find_value(name, t, source)
+    args_for_c = {
+        name: find(name, parameter.annotation) for name, parameter in inspect.signature(c).parameters.items()
+    }
+    unused = set(sys.argv[1:])
+    for name, value in args_for_c.items():
+        if attr.has(value):
+            unused = check_unused(unused, type(value))
+        else:
+            unused -= {name}
+
+    return c(**args_for_c)
