@@ -22,7 +22,7 @@ def is_optional(t: Type[T]) -> bool:
 
 def default_interpret_string(s: Optional[str], t: Type[T]) -> T:
     if s is None and inhabits(s, t):
-        return s
+        return None
     try:
         return t(s)
     except TypeError:
@@ -126,7 +126,7 @@ def find_value(name, t: Type[T], default, source: Source, interpret_string: Inte
     prefixed_name = ".".join(prefix)
     value = source.get(prefixed_name)
     if value is None:
-        value = os.environ.get(prefixed_name, default)
+        value = os.environ.get(prefixed_name, default if default != attr.NOTHING else None)
 
     if value is None and default is not None:
         raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
@@ -168,7 +168,7 @@ def print_argument_descriptions(d: dict, prefix: List[str] = []) -> None:
             name = ".".join(namelist)
             print(f" --{name}: {value}")
 
-def build(t: Type[T]) -> T:
+def build(t: Type[T], interpret_string=default_interpret_string) -> T:
     source = Source.from_argv()
     if source.args.help:
         print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
@@ -178,10 +178,10 @@ def build(t: Type[T]) -> T:
     if unknown:
         print(f"Unknown arguments: {unknown}")
         sys.exit(1)
-    return find_obj(t, source)
+    return find_obj(t, source, interpret_string=interpret_string)
 
 
-def run_function(c: Callable[...,T]) -> T:
+def run_function(c: Callable[...,T], interpret_string=default_interpret_string) -> T:
     source = Source.from_argv()
     if source.args.help:
         print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")

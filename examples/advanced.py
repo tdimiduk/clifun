@@ -2,7 +2,7 @@ from typing import Optional
 import datetime as dt
 
 import attr
-import datacli
+import clattr
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -20,5 +20,5 @@ def my_program(data: Bar):
     print(data)
 
 if __name__ == "__main__":
-    bar = datacli.build(Bar)
+    bar = clattr.build(Bar)
     my_program(bar)
