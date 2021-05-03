@@ -1,6 +1,6 @@
 # clattr
 
-Simple specification of a command line interface with an attrs class or a function.
+Simple specification of a command line interface with an attrs class or a function. 
 
 You define the inputs to your program in the form of a (possibly nested) attrs class (dataclass). `clattr` will collect the fields of that class from command line arguments, environment variables and config files.
 
@@ -95,5 +95,6 @@ python examples/advanced.py --c 1 examples/foo.json
 Bar(f=Foo(a=1, b='str'), c=1)
 ```
 
-Inspired by [clout](https://github.com/python-clout/clout) but I wrote a new library because that one hasn't been updated in a year and I wanted to make some different choices and be opinionated to offer a simple out of the box experience.
+Inspired by [clout](https://github.com/python-clout/clout). `clout` appeared somewhat abandoned at the time I started `clattr`, and I wanted to try some things with treating type annotations as first class information to reduce boilerplate.
+
 
