@@ -5,7 +5,7 @@ import clattr
 @attr.s(auto_attribs=True, frozen=True)
 class Basic:
     a: int
-    b: str = "Optional"
+    b: str = "not provided"
 
 def my_program(data: Basic):
     # Your actual program will go here. For this example we just print the input.

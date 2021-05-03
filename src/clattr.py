@@ -20,10 +20,17 @@ def inhabits(v: Any, t: Type[T]) -> bool:
 def is_optional(t: Type[T]) -> bool:
     return Union[t, None] == t
 
+def type_in_optional(t: Optional[Type[T]]) -> Type[T]:
+    for s in t.__args__:
+        if s != type(None):
+            return s
+
 def default_interpret_string(s: Optional[str], t: Type[T]) -> T:
     if s is None and inhabits(s, t):
         return None
     try:
+        if is_optional(t):
+            return type_in_optional(t)(s)
         return t(s)
     except TypeError:
         pass

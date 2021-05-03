@@ -4,22 +4,35 @@ Simple specification of a command line interface with an attrs class or a functi
 
 You define the inputs to your program in the form of a (possibly nested) attrs class (dataclass). `clattr` will collect the fields of that class from command line arguments, environment variables and config files.
 
-In the simplest form, let's consider a case where you are writing a program that wants two inputs
+In the simplest form, let's consider a case where you are writing a program that wants two inputs of which one is optional
 
 ```
+import attr
+import clattr
+
+
 @attr.s(auto_attribs=True, frozen=True)
-class Foo:
+class Basic:
     a: int
-    b: str
+    b: str = "not provided"
+
+def my_program(data: Basic):
+    # Your actual program will go here. For this example we just print the input.
+    print(data)
+
+
+if __name__ == "__main__":
+    data = clattr.build(Basic)
+    my_program(data)
 ```
 
 This could be invoked as
 ```
-python example.py --a 1 --b hi
+python examples/basic.py --a 1 --b hi
 ```
-datacli will construct this object
+clattr will construct this object
 ```
-Foo(a=1, b='hi')
+Basic(a=1, b='hi')
 ```
 Which you can then pass into the rest of your code as you please. The example simply prints it and then exits.
 
@@ -32,27 +45,42 @@ python example.py
 ```
 again yields
 ```
-Foo(a=1, b='hi')
+Basic(a=1, b='hi')
 ```
 
-`datacli` also supports nested objects
+`clattr` also supports nested objects
 
 ```
+from typing import Optional
+import datetime as dt
+
+import attr
+import clattr
+
+
 @attr.s(auto_attribs=True, frozen=True)
 class Foo:
-    a: int
-    b: str
+    a: dt.datetime
+    b: Optional[str] = None
+
 
 @attr.s(auto_attribs=True, frozen=True)
 class Bar:
     f: Foo
     c: int
+
+def my_program(data: Bar):
+    print(data)
+
+if __name__ == "__main__":
+    bar = clattr.build(Bar)
+    my_program(bar)
 ```
 
 You specify values for the fields in the nested class by referring to them with a their field name in the outer class
 
 ```
-python example-nested.py --c 1 --f.a 1 --f.b hi
+python examples/advanced.py --c 1 --f.a 1 --f.b hi
 ```
 ```
 Bar(f=Foo(a=1, b='hi'), c=1)
@@ -61,7 +89,7 @@ Bar(f=Foo(a=1, b='hi'), c=1)
 You can also supply `json` one or more formatted `config` files. Provide the name(s) of these files as positional arguments. datacli will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
 
 ```
-python example-nested.py --c 1 foo.json
+python examples/advanced.py --c 1 examples/foo.json
 ```
 ```
 Bar(f=Foo(a=1, b='str'), c=1)
