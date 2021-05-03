@@ -182,11 +182,10 @@ def build(t: Type[T], interpret_string=default_interpret_string) -> T:
 
 
 def run_function(c: Callable[...,T], interpret_string=default_interpret_string) -> T:
+    """
+    Feature preview. Doesn't have help or default handling and behavior may change
+    """
     source = Source.from_argv()
-    if source.args.help:
-        print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
-        print_argument_descriptions(describe(t))
-        sys.exit(0)
     def find(name: str, t: Type[T]) -> T:
         if attr.has(t):
             return find_obj(t, source)
