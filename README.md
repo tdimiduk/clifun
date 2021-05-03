@@ -1,8 +1,8 @@
-# datacli
+# clattr
 
-Simple specification of a command line interface with an attrs class.
+Simple specification of a command line interface with an attrs class or a function.
 
-You define the inputs to your program in the form of a (possibly nested) attrs class (dataclass). `datacli` will collect the fields of that class from command line arguments, environment variables and config files.
+You define the inputs to your program in the form of a (possibly nested) attrs class (dataclass). `clattr` will collect the fields of that class from command line arguments, environment variables and config files.
 
 In the simplest form, let's consider a case where you are writing a program that wants two inputs
 
