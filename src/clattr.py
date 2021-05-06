@@ -9,39 +9,22 @@ import inspect
 import datetime as dt
 
 import attr
+from interpret_string import interpret as default_interpret, StringInterpreter
 
 S = TypeVar("S")
 T = TypeVar("T")
-InterpretString = Callable[[Optional[str]], S]
+O = TypeVar("O", Any, None)
 
-def inhabits(v: Any, t: Type[T]) -> bool:
-    return Union[type(v), t] == t
 
 def is_optional(t: Type[T]) -> bool:
     return Union[t, None] == t
 
 def type_in_optional(t: Optional[Type[T]]) -> Type[T]:
-    for s in t.__args__:
+    # this should use typing.get_args, but that is not available until python 3.8
+    for s in t.__args__: # type: ignore
         if s != type(None):
             return s
-
-def default_interpret_string(s: Optional[str], t: Type[T]) -> T:
-    if s is None and inhabits(s, t):
-        return None
-    try:
-        if is_optional(t):
-            return type_in_optional(t)(s)
-        return t(s)
-    except TypeError:
-        pass
-    if t == dt.datetime:
-        if hasattr(dt.datetime, 'fromisoformat'):
-            return dt.datetime.fromisoformat(s)
-        # for python 3.6 where `fromisoformat` doesn't exist
-        import isodate
-        return isodate.parse_datetime(t)
-
-    raise Exception(f"Could not interpret {s} as type {t}")
+    raise Exception(f"Internal error, failed to unwrap Optional type: {t}")
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -99,8 +82,8 @@ class Source:
 
     @classmethod
     def from_argv(cls, args: List[str] = sys.argv) -> "Source":
-        args = Arguments.from_argv(args)
-        return cls(args, load_config_files(args.positional))
+        args_object = Arguments.from_argv(args)
+        return cls(args_object, load_config_files(args_object.positional))
 
 
 def load_config_files(filenames: List[str]) -> ConfigFiles:
@@ -113,31 +96,35 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
     return ConfigFiles([load(name) for name in filenames[::-1]])
 
 
-def find_obj(t: Type[T], source: Source, interpret_string: InterpretString, prefix: List[str] = []):
+def find_obj(t: Type[T], source: Source, interpret: StringInterpreter, prefix: List[str] = []):
     if not attr.has(t):
         raise ValueError(f"{t} is not an attrs class")
 
     def find(field):
         if field.type is None:
             raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
-        return find_value(name=field.name, t=field.type, default=field.default, source=source, interpret_string=interpret_string, prefix=prefix)
+        return find_value(name=field.name, t=field.type, default=field.default, source=source, interpret=interpret, prefix=prefix)
 
     d: dict = {field.name: find(field) for field in attr.fields(t)}
     return t(**d)  # type: ignore
 
 
-def find_value(name, t: Type[T], default, source: Source, interpret_string: InterpretString,  prefix: List[str] = []) -> T:
+def find_value(name, t: Type[O], default, source: Source, interpret: StringInterpreter,  prefix: List[str] = []) -> O:
     prefix = prefix + [name]
     if attr.has(t):
-        return find_obj(t=t, source=source, interpret_string=interpret_string, prefix=prefix)
+        return find_obj(t=t, source=source, interpret=interpret, prefix=prefix)
     prefixed_name = ".".join(prefix)
     value = source.get(prefixed_name)
     if value is None:
         value = os.environ.get(prefixed_name, default if default != attr.NOTHING else None)
 
-    if value is None and default is not None:
-        raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
-    return interpret_string(value, t)
+    if value is None:
+        if default is not None:
+            raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
+        else:
+            return value
+    
+    return interpret.as_type(value, t)
 
 
 def arg_unused(parts: List[str], t: Type[T]) -> bool:
@@ -175,7 +162,7 @@ def print_argument_descriptions(d: dict, prefix: List[str] = []) -> None:
             name = ".".join(namelist)
             print(f" --{name}: {value}")
 
-def build(t: Type[T], interpret_string=default_interpret_string) -> T:
+def build(t: Type[T], interpret=default_interpret) -> T:
     source = Source.from_argv()
     if source.args.help:
         print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
@@ -185,19 +172,19 @@ def build(t: Type[T], interpret_string=default_interpret_string) -> T:
     if unknown:
         print(f"Unknown arguments: {unknown}")
         sys.exit(1)
-    return find_obj(t, source, interpret_string=interpret_string)
+    return find_obj(t, source, interpret=interpret)
 
 
-def run_function(c: Callable[...,T], interpret_string=default_interpret_string) -> T:
+def run_function(c: Callable[...,T], interpret=default_interpret) -> T:
     """
     Feature preview. Doesn't have help or default handling and behavior may change
     """
     source = Source.from_argv()
     def find(name: str, t: Type[T]) -> T:
         if attr.has(t):
-            return find_obj(t, source)
+            return find_obj(t, source, interpret=interpret)
         else:
-            return find_value(name, t, source)
+            return find_value(name, t, source=source, interpret=interpret)
     args_for_c = {
         name: find(name, parameter.annotation) for name, parameter in inspect.signature(c).parameters.items()
     }
