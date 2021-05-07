@@ -2,7 +2,8 @@ import argparse
 import sys
 import json
 import os
-from typing import Any, Set, Type, TypeVar, List, Optional, Dict, Union, Callable, Iterable
+from typing import Any, Set, Type, TypeVar, List, Optional, Dict, Union, Callable, Iterable, Generic
+import typing
 import collections
 import pathlib
 import inspect
@@ -15,17 +16,19 @@ S = TypeVar("S")
 T = TypeVar("T")
 O = TypeVar("O", Any, None)
 
+NotSpecified = inspect._empty
 
 def is_optional(t: Type[T]) -> bool:
     return Union[t, None] == t
 
-def type_in_optional(t: Optional[Type[T]]) -> Type[T]:
+
+def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
     # this should use typing.get_args, but that is not available until python 3.8
+    if type(t) != typing._GenericAlias:
+        return t
     for s in t.__args__: # type: ignore
         if s != type(None):
             return s
-    raise Exception(f"Internal error, failed to unwrap Optional type: {t}")
-
 
 @attr.s(auto_attribs=True, frozen=True)
 class Arguments:
@@ -70,14 +73,15 @@ class ConfigFiles:
         return default
 
 
+
 @attr.s(auto_attribs=True, frozen=True)
 class Source:
     args: Arguments
     config_files: ConfigFiles
     from_env: bool = True
 
-    def get(self, key: str) -> Optional[str]:
-        env_value = os.environ.get(key.upper()) if self.from_env else None
+    def get(self, key: str, default: Optional[T] = None) -> Union[str, T, None]:
+        env_value = os.environ.get(key.upper(), default) if self.from_env else default
         return self.args.get(key, self.config_files.get(key, env_value))
 
     @classmethod
@@ -103,7 +107,7 @@ def find_obj(t: Type[T], source: Source, interpret: StringInterpreter, prefix: L
     def find(field):
         if field.type is None:
             raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
-        return find_value(name=field.name, t=field.type, default=field.default, source=source, interpret=interpret, prefix=prefix)
+        return find_value(name=field.name, t=field.type, source=source, default=field.default, interpret=interpret, prefix=prefix)
 
     d: dict = {field.name: find(field) for field in attr.fields(t)}
     return t(**d)  # type: ignore
@@ -114,17 +118,13 @@ def find_value(name, t: Type[O], default, source: Source, interpret: StringInter
     if attr.has(t):
         return find_obj(t=t, source=source, interpret=interpret, prefix=prefix)
     prefixed_name = ".".join(prefix)
-    value = source.get(prefixed_name)
-    if value is None:
-        value = os.environ.get(prefixed_name, default if default != attr.NOTHING else None)
+    value = source.get(prefixed_name, default)
 
-    if value is None:
-        if default is not None:
-            raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
-        else:
-            return value
-    
-    return interpret.as_type(value, t)
+    if value in {attr.NOTHING, inspect._empty}:
+        raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
+    if value is None and is_optional(t):
+        return None
+    return interpret.as_type(value, unwrap_optional(t))
 
 
 def arg_unused(parts: List[str], t: Type[T]) -> bool:
@@ -176,17 +176,14 @@ def build(t: Type[T], interpret=default_interpret) -> T:
 
 
 def run_function(c: Callable[...,T], interpret=default_interpret) -> T:
-    """
-    Feature preview. Doesn't have help or default handling and behavior may change
-    """
     source = Source.from_argv()
-    def find(name: str, t: Type[T]) -> T:
+    def find(name: str, t: Type[T], default) -> T:
         if attr.has(t):
             return find_obj(t, source, interpret=interpret)
         else:
-            return find_value(name, t, source=source, interpret=interpret)
+            return find_value(name, t, source=source, interpret=interpret, default=default)
     args_for_c = {
-        name: find(name, parameter.annotation) for name, parameter in inspect.signature(c).parameters.items()
+        name: find(name, parameter.annotation, parameter.default) for name, parameter in inspect.signature(c).parameters.items()
     }
     unused = set(sys.argv[1:])
     for name, value in args_for_c.items():
