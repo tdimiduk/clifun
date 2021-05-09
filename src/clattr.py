@@ -1,16 +1,16 @@
-import argparse
-import sys
+import inspect
 import json
 import os
-from typing import Any, Set, Type, TypeVar, List, Optional, Dict, Union, Callable, Iterable, Generic
-import typing
-import collections
 import pathlib
-import inspect
-import datetime as dt
+import sys
+import typing
+from typing import (Any, Callable, Dict, Iterable, List, Optional, Set, Type,
+                    TypeVar, Union)
 
 import attr
-from interpret_string import interpret as default_interpret, StringInterpreter
+
+from interpret_string import StringInterpreter
+from interpret_string import interpret as default_interpret
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -104,12 +104,12 @@ def find_obj(t: Type[T], source: Source, interpret: StringInterpreter, prefix: L
     if not attr.has(t):
         raise ValueError(f"{t} is not an attrs class")
 
-    def find(field):
-        if field.type is None:
-            raise ValueError(f"Field {field.name} of {t} lacks a type annotation")
-        return find_value(name=field.name, t=field.type, source=source, default=field.default, interpret=interpret, prefix=prefix)
+    def find(parameter):
+        if parameter.annotation == NotSpecified:
+            raise ValueError(f"Field {parameter.name} of {t} lacks a type annotation")
+        return find_value(name=parameter.name, t=parameter.annotation, source=source, default=parameter.default, interpret=interpret, prefix=prefix)
 
-    d: dict = {field.name: find(field) for field in attr.fields(t)}
+    d: dict = {name: find(parameter) for name, parameter in inspect.signature(t).parameters.items()}
     return t(**d)  # type: ignore
 
 
