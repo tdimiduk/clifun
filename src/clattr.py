@@ -100,7 +100,7 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
     return ConfigFiles([load(name) for name in filenames[::-1]])
 
 
-def find_obj(t: Type[T], source: Source, interpret: StringInterpreter, prefix: List[str] = []):
+def find_obj(t: Type[T], source: Source, interpret: StringInterpreter=default_interpret, prefix: List[str] = []):
     if not attr.has(t):
         raise ValueError(f"{t} is not an attrs class")
 
@@ -121,7 +121,7 @@ def find_value(name, t: Type[O], default, source: Source, interpret: StringInter
     value = source.get(prefixed_name, default)
 
     if value in {attr.NOTHING, inspect._empty}:
-        raise ValueError(f"could not find value for argument {prefixed_name} ({t}")
+        raise ValueError(f"could not find value for argument '{prefixed_name}' ({t}")
     if value is None and is_optional(t):
         return None
     return interpret.as_type(value, unwrap_optional(t))
@@ -175,8 +175,8 @@ def build(t: Type[T], interpret=default_interpret) -> T:
     return find_obj(t, source, interpret=interpret)
 
 
-def run_function(c: Callable[...,T], interpret=default_interpret) -> T:
-    source = Source.from_argv()
+def run_function(c: Callable[...,T], interpret=default_interpret, args: List[str] = []) -> T:
+    source = Source.from_argv(args)
     def find(name: str, t: Type[T], default) -> T:
         if attr.has(t):
             return find_obj(t, source, interpret=interpret)
