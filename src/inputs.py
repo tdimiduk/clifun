@@ -1,5 +1,5 @@
 import attr
-from typing import Any, List, Type, Generic, TypeVar, Callable, Iterator
+from typing import Any, List, Type, Generic, TypeVar, Callable, Iterable, Set
 import inspect
 import itertools
 
@@ -30,7 +30,7 @@ class Value(Generic[O]):
         )
 
 
-def for_parameter(parameter, interpret, prefix: List[str]) -> Iterator[Value]:
+def for_parameter(parameter, interpret, prefix: List[str]) -> Iterable[Value]:
     if parameter.annotation == NOT_SPECIFIED:
         raise Exception(f"Missing type annotation for {parameter}")
     t = unwrap_optional(parameter.annotation)
@@ -55,3 +55,5 @@ def for_callable(c: Callable, interpret: StringInterpreter) -> List[Value]:
         )
     )
 
+def valid_args(values: List[Value]) -> Set[str]:
+    return {v.name for v in values}

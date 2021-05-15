@@ -143,21 +143,25 @@ def find_value(
     return interpret.as_type(value, unwrap_optional(t))
 
 
-def arg_unused(parts: List[str], t: Type[T]) -> bool:
-    fields_dict = attr.fields_dict(t)
-    if parts[0] not in fields_dict:
-        return True
-    elif len(parts) == 1:
-        return False
-    child_type = fields_dict[parts[0]].type
-    if child_type is None:
-        raise ValueError(f"Missing type annotation for field {child_type} of {t}")
-    return arg_unused(parts[1:], child_type)
+def invalid_args(args, allowed_args):
+    return set(args) - inputs.valid_args(allowed_args)
+
+def check_invalid_args(source, input_values):
+    unknown = invalid_args(source.args.keyword.keys(), input_values)
+    if unknown:
+        print(f"Unknown arguments: {unknown}")
+        print_usage(input_values)
+        sys.exit(1)
+
+def check_help(source, input_values):
+    if source.args.help:
+        print_usage(input_values)
+        sys.exit(0)
 
 
-def check_unused(arg_names: Iterable[str], t: Type[T]) -> Set[str]:
-    return {arg for arg in arg_names if arg_unused(arg.split("."), t)}
-
+def print_usage(input_values):
+    print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
+    print("\n".join(describe_needed(input_values)))
 
 def describe_needed(input_values: List[inputs.Value]) -> List[str]:
     def desc(v):
@@ -171,14 +175,8 @@ def describe_needed(input_values: List[inputs.Value]) -> List[str]:
 def build(t: Type[T], interpret=default_interpret) -> T:
     source = Source.from_argv()
     input_values = inputs.for_callable(t, interpret)
-    if source.args.help:
-        print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
-        print("\n".join(describe_needed(input_values)))
-        sys.exit(0)
-    unknown = check_unused(source.args.keyword.keys(), t)
-    if unknown:
-        print(f"Unknown arguments: {unknown}")
-        sys.exit(1)
+    check_help(source, input_values)
+    check_invalid_args(source, input_values)
     return find_obj(t, source, interpret=interpret)
 
 
@@ -187,11 +185,7 @@ def run_function(
 ) -> T:
     source = Source.from_argv(args)
     input_values = inputs.for_callable(c, interpret)
-    if source.args.help:
-        print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
-        print("\n".join(describe_needed(input_values)))
-        sys.exit(0)
-
+    check_help(source, input_values)
     def find(name: str, t: Type[T], default) -> T:
         if attr.has(t):
             return find_obj(t, source, interpret=interpret)
@@ -204,11 +198,6 @@ def run_function(
         name: find(name, parameter.annotation, parameter.default)
         for name, parameter in inspect.signature(c).parameters.items()
     }
-    unused = set(sys.argv[1:])
-    for name, value in args_for_c.items():
-        if attr.has(value):
-            unused = check_unused(unused, type(value))
-        else:
-            unused -= {name}
+    check_invalid_args(source, input_values)
 
     return c(**args_for_c)

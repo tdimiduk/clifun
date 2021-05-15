@@ -1,6 +1,7 @@
 import pathlib
 import sys
 import clattr
+import inputs
 import pytest
 import datetime as dt
 
@@ -22,7 +23,8 @@ def test_basic():
         clattr.find_obj(basic.Basic, clattr.Source.from_argv(["test_basic", '--b', 'test']))
 
 def test_check_unused():
-    assert clattr.check_unused(['c', 'a'], basic.Basic) == {'c'}
+    input_args = inputs.for_callable(basic.Basic, clattr.default_interpret)
+    assert clattr.invalid_args(['c', 'a'], input_args) == {'c'}
 
 def test_advanced():
     args = ["test_advanced", "--f.a", "2021-01-01", "--c", "1"]
