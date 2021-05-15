@@ -12,6 +12,7 @@ class InterpretationError(ValueError):
     def __str__(self):
         return f"Could not interpret '{self.s}' as {self.t}"
 
+
 class StringInterpreter:
     def __init__(self, mapping: Dict[Type[T], Callable[[str], T]] = {}):
         self.mapping = mapping
@@ -28,25 +29,31 @@ class StringInterpreter:
     def __contains__(self, t: T) -> bool:
         return t in self.mapping
 
+    def __getitem__(self, t: T) -> Callable[[str], T]:
+        return self.mapping[t]
+
+
 def interpret_bool(s: str) -> bool:
     if s.lower() in {"t", "true", "yes", "y"}:
         return True
-    elif s.lower() in {"f", 'false', 'no', 'n'}:
+    elif s.lower() in {"f", "false", "no", "n"}:
         return False
     else:
         raise InterpretationError(s, bool)
 
 
 def interpret_datetime(s: str) -> dt.datetime:
-      if hasattr(dt.datetime, 'fromisoformat'):
-          return dt.datetime.fromisoformat(s)
-      else:
-          # for python 3.6 where `fromisoformat` doesn't exist
-          import isodate # type: ignore
-          return isodate.parse_datetime(s)
+    if hasattr(dt.datetime, "fromisoformat"):
+        return dt.datetime.fromisoformat(s)
+    else:
+        # for python 3.6 where `fromisoformat` doesn't exist
+        import isodate  # type: ignore
+
+        return isodate.parse_datetime(s)
+
 
 def interpret_date(s: str) -> dt.date:
-    return dt.date(*[int(i) for i in s.split('-')])
+    return dt.date(*[int(i) for i in s.split("-")])
 
 
 interpret = StringInterpreter()

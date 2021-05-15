@@ -4,31 +4,26 @@ import os
 import pathlib
 import sys
 import typing
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Set, Type,
-                    TypeVar, Union)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import attr
 
 from interpret_string import StringInterpreter
 from interpret_string import interpret as default_interpret
+from tools import T, S, O, NOT_SPECIFIED, is_optional, unwrap_optional, type_to_string
+import inputs
 
-S = TypeVar("S")
-T = TypeVar("T")
-O = TypeVar("O", Any, None)
-
-NotSpecified = inspect._empty
-
-def is_optional(t: Type[T]) -> bool:
-    return Union[t, None] == t
-
-
-def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
-    # this should use typing.get_args, but that is not available until python 3.8
-    if type(t) != typing._GenericAlias:
-        return t
-    for s in t.__args__: # type: ignore
-        if s != type(None):
-            return s
 
 @attr.s(auto_attribs=True, frozen=True)
 class Arguments:
@@ -49,7 +44,7 @@ class Arguments:
             if arg in {"-h", "--help"}:
                 return Arguments([], {}, True)
             if arg[:2] == "--":
-                if len(args) < i+2:
+                if len(args) < i + 2:
                     raise ValueError(f"Missing value for argument: {key}")
                 keyword[key] = args[i + 1]
                 i += 2
@@ -71,7 +66,6 @@ class ConfigFiles:
             if key in config:
                 return config[key]
         return default
-
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -100,27 +94,49 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
     return ConfigFiles([load(name) for name in filenames[::-1]])
 
 
-def find_obj(t: Type[T], source: Source, interpret: StringInterpreter=default_interpret, prefix: List[str] = []):
+def find_obj(
+    t: Type[T],
+    source: Source,
+    interpret: StringInterpreter = default_interpret,
+    prefix: List[str] = [],
+):
     if not attr.has(t):
         raise ValueError(f"{t} is not an attrs class")
 
     def find(parameter):
-        if parameter.annotation == NotSpecified:
+        if parameter.annotation == NOT_SPECIFIED:
             raise ValueError(f"Field {parameter.name} of {t} lacks a type annotation")
-        return find_value(name=parameter.name, t=parameter.annotation, source=source, default=parameter.default, interpret=interpret, prefix=prefix)
+        return find_value(
+            name=parameter.name,
+            t=parameter.annotation,
+            source=source,
+            default=parameter.default,
+            interpret=interpret,
+            prefix=prefix,
+        )
 
-    d: dict = {name: find(parameter) for name, parameter in inspect.signature(t).parameters.items()}
+    d: dict = {
+        name: find(parameter)
+        for name, parameter in inspect.signature(t).parameters.items()
+    }
     return t(**d)  # type: ignore
 
 
-def find_value(name, t: Type[O], default, source: Source, interpret: StringInterpreter,  prefix: List[str] = []) -> O:
+def find_value(
+    name,
+    t: Type[O],
+    default,
+    source: Source,
+    interpret: StringInterpreter,
+    prefix: List[str] = [],
+) -> O:
     prefix = prefix + [name]
     if attr.has(t):
         return find_obj(t=t, source=source, interpret=interpret, prefix=prefix)
     prefixed_name = ".".join(prefix)
     value = source.get(prefixed_name, default)
 
-    if value in {attr.NOTHING, inspect._empty}:
+    if value == NOT_SPECIFIED:
         raise ValueError(f"could not find value for argument '{prefixed_name}' ({t}")
     if value is None and is_optional(t):
         return None
@@ -142,31 +158,22 @@ def arg_unused(parts: List[str], t: Type[T]) -> bool:
 def check_unused(arg_names: Iterable[str], t: Type[T]) -> Set[str]:
     return {arg for arg in arg_names if arg_unused(arg.split("."), t)}
 
-def describe(t: Type[T]) -> Dict[str, Union[str, dict]]:
-    def desc(t):
-        if attr.has(t):
-            return describe(t)
-        if is_optional(t):
-            types = set(t.__args__) - {type(None)}
-            types_str = ", ".join(t.__name__ for t in types)
-            return f"Optional[{types_str}]"
-        return str(t.__name__)
-    return {f.name: desc(f.type) for f in attr.fields(t)}
 
-def print_argument_descriptions(d: dict, prefix: List[str] = []) -> None:
-    for key, value in d.items():
-        namelist = prefix + [key]
-        if isinstance(value, dict):
-            print_argument_descriptions(value, namelist)
-        else:
-            name = ".".join(namelist)
-            print(f" --{name}: {value}")
+def describe_needed(input_values: List[inputs.Value]) -> List[str]:
+    def desc(v):
+        base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
+        if v.default != NOT_SPECIFIED:
+            default = f'"{v.default}"' if isinstance(v.default, str) else v.default
+            return f"{base} (default: {default})"
+        return base
+    return [desc(v) for v in input_values]
 
 def build(t: Type[T], interpret=default_interpret) -> T:
     source = Source.from_argv()
+    input_values = inputs.for_callable(t, interpret)
     if source.args.help:
         print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
-        print_argument_descriptions(describe(t))
+        print("\n".join(describe_needed(input_values)))
         sys.exit(0)
     unknown = check_unused(source.args.keyword.keys(), t)
     if unknown:
@@ -175,15 +182,27 @@ def build(t: Type[T], interpret=default_interpret) -> T:
     return find_obj(t, source, interpret=interpret)
 
 
-def run_function(c: Callable[...,T], interpret=default_interpret, args: List[str] = []) -> T:
+def run_function(
+    c: Callable[..., T], interpret=default_interpret, args: List[str] = []
+) -> T:
     source = Source.from_argv(args)
+    input_values = inputs.for_callable(c, interpret)
+    if source.args.help:
+        print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
+        print("\n".join(describe_needed(input_values)))
+        sys.exit(0)
+
     def find(name: str, t: Type[T], default) -> T:
         if attr.has(t):
             return find_obj(t, source, interpret=interpret)
         else:
-            return find_value(name, t, source=source, interpret=interpret, default=default)
+            return find_value(
+                name, t, source=source, interpret=interpret, default=default
+            )
+
     args_for_c = {
-        name: find(name, parameter.annotation, parameter.default) for name, parameter in inspect.signature(c).parameters.items()
+        name: find(name, parameter.annotation, parameter.default)
+        for name, parameter in inspect.signature(c).parameters.items()
     }
     unused = set(sys.argv[1:])
     for name, value in args_for_c.items():
@@ -193,4 +212,3 @@ def run_function(c: Callable[...,T], interpret=default_interpret, args: List[str
             unused -= {name}
 
     return c(**args_for_c)
-
