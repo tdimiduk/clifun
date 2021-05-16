@@ -4,19 +4,19 @@ import pathlib
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union
 
-import attr
-
 import inputs
 from interpret_string import StringInterpreter
 from interpret_string import interpret as default_interpret
 from tools import NOT_SPECIFIED, T, get_parameters, is_optional, type_to_string
 
 
-@attr.s(auto_attribs=True, frozen=True)
 class Arguments:
-    positional: List[str]
-    keyword: Dict[str, str]
-    help: bool = False
+    def __init__(
+        self, positional: List[str], keyword: Dict[str, str], help: bool = False
+    ):
+        self.positional = positional
+        self.keyword = keyword
+        self.help = help
 
     @classmethod
     def from_argv(cls, args: Optional[List[str]] = None) -> "Arguments":
@@ -44,9 +44,9 @@ class Arguments:
         return self.keyword.get(key, default)
 
 
-@attr.s(auto_attribs=True, frozen=True)
 class ConfigFiles:
-    configs: List[Dict[str, str]]
+    def __init__(self, configs: List[Dict[str, str]]):
+        self.configs = configs
 
     def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         for config in self.configs:
@@ -55,11 +55,13 @@ class ConfigFiles:
         return default
 
 
-@attr.s(auto_attribs=True, frozen=True)
 class Source:
-    args: Arguments
-    config_files: ConfigFiles
-    from_env: bool = True
+    def __init__(
+        self, args: Arguments, config_files: ConfigFiles, from_env: bool = True
+    ):
+        self.args = args
+        self.config_files = config_files
+        self.from_env = from_env
 
     def get(self, key: str, default: Optional[T] = None) -> Union[str, T, None]:
         env_value = os.environ.get(key.upper(), default) if self.from_env else default
