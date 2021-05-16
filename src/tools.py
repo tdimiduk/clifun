@@ -27,6 +27,6 @@ def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
 
 
 def type_to_string(t: Type[O]) -> str:
-     mw if is_optional(t):
+    if is_optional(t):
         return f"Optional[{unwrap_optional(t).__name__}]"
     return t.__name__
