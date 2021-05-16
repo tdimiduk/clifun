@@ -1,8 +1,6 @@
 # clattr
 
-Easily make a command line interface from any interface in your code. This can either be a function or a class/dataclass/attrs class. For a function, clattr will assemble the needed arguments to the function and then call it. For a class, clattr will assemble an instance of the object and return it to you. 
-
-Let's start off with an example 
+Easily make a command line interface from any interface in your code. How easily? This easy:
 
 ```
 import clattr
@@ -24,7 +22,7 @@ Running some code with: a=1, b=not provided
 ```
 
 
-If you want to think in a more data oriented design, you can have clattr construct a data object for you
+If you want to think in a more data oriented design, you can have clattr construct a data object for you and use it as you please. 
 
 ```
 import attr
@@ -106,7 +104,7 @@ python examples/advanced.py --c 1 --f.a 2020-01-01 --f.b hi
 Bar(f=Foo(a=1, b='hi'), c=1)
 ```
 
-You can also supply `json` one or more formatted `config` files. Provide the name(s) of these files as positional arguments. datacli will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
+You can also supply one or more `json` formatted `config` files. Provide the name(s) of these files as positional arguments. `clattr`` will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
 
 ```
 python examples/advanced.py --c 1 examples/foo.json
@@ -115,6 +113,6 @@ python examples/advanced.py --c 1 examples/foo.json
 Bar(f=Foo(a=1, b='str'), c=1)
 ```
 
-Inspired by [clout](https://github.com/python-clout/clout). `clout` appeared somewhat abandoned at the time I started `clattr`, and I wanted to try some things with treating type annotations as first class information to reduce boilerplate.
+`clattr` is inspired by [clout](https://github.com/python-clout/clout), but I wanted to try being a bit more opinionated to make both the library and code using it simpler.
 
 
