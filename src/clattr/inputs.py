@@ -1,18 +1,16 @@
 import itertools
-from typing import Callable, Generic, Iterable, List, Set, Type
+from typing import Callable, Generic, Iterable, List, Optional, Set, Type
 
-import attr
-
-from interpret_string import StringInterpreter
-from tools import NOT_SPECIFIED, O, get_parameters, unwrap_optional
+from .interpret_string import StringInterpreter
+from .tools import NOT_SPECIFIED, O, get_parameters, unwrap_optional
 
 
-@attr.s(auto_attribs=True, frozen=True)
 class Value(Generic[O]):
-    name: str
-    t: Type[O]
-    default: O
-    prefix: List[str] = attr.Factory(list)
+    def __init__(self, name: str, t: Type[O], default: O, prefix: Optional[List[str]] = None):
+        self.name = name
+        self.t = t
+        self.default = default
+        self.prefix = [] if prefix is None else prefix
 
     @property
     def prefixed_name(self):

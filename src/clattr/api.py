@@ -4,10 +4,9 @@ import pathlib
 import sys
 from typing import Any, Callable, Dict, List, Optional, Union
 
-import inputs
-from interpret_string import StringInterpreter
-from interpret_string import interpret as default_interpret
-from tools import NOT_SPECIFIED, T, get_parameters, is_optional, type_to_string
+from . import inputs
+from . import interpret_string
+from .tools import NOT_SPECIFIED, T, get_parameters, is_optional, type_to_string
 
 
 class Arguments:
@@ -99,7 +98,7 @@ def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T
 
 
 def collect_values(
-    values: List[inputs.Value], source: Source, interpret: StringInterpreter
+    values: List[inputs.Value], source: Source, interpret: interpret_string.StringInterpreter
 ) -> Dict[str, Any]:
     missing = set()
 
@@ -160,7 +159,7 @@ def describe_needed(input_values: List[inputs.Value]) -> List[str]:
 
 
 def call(
-    c: Callable[..., T], args: Optional[List[str]] = None, interpret=default_interpret
+    c: Callable[..., T], args: Optional[List[str]] = None, interpret=interpret_string.interpret
 ) -> T:
     argv = sys.argv if args is None else args
     source = Source.from_argv(argv)

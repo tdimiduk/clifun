@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Any, Dict, Callable, TypeVar, Type, Optional, Union, overload
 
-from tools import T, is_optional, unwrap_optional
+from .tools import T, is_optional, unwrap_optional
 
 
 class InterpretationError(ValueError):
