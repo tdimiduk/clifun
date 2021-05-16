@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "clattr"
-version = "0.0.0"
+version = "0.0.1"
 description = "Construct a comand line interface based on a function or class"
 authors = ["Tom Dimiduk <tom@dimiduk.net>"]
 license = "MIT"
