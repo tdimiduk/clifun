@@ -1,10 +1,10 @@
-import attr
-from typing import Any, List, Type, Generic, TypeVar, Callable, Iterable, Set
-import inspect
 import itertools
+from typing import Callable, Generic, Iterable, List, Set, Type
+
+import attr
 
 from interpret_string import StringInterpreter
-from tools import T, S, O, NOT_SPECIFIED, is_optional, unwrap_optional
+from tools import NOT_SPECIFIED, O, get_parameters, unwrap_optional
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -40,7 +40,7 @@ def for_parameter(parameter, interpret, prefix: List[str]) -> Iterable[Value]:
     return itertools.chain(
         *(
             for_parameter(parameter, interpret, prefix)
-            for parameter in inspect.signature(t).parameters.values()
+            for parameter in get_parameters(t)
         )
     )
 
@@ -50,10 +50,11 @@ def for_callable(c: Callable, interpret: StringInterpreter) -> List[Value]:
         itertools.chain(
             *(
                 for_parameter(parameter, interpret, [])
-                for parameter in inspect.signature(c).parameters.values()
+                for parameter in get_parameters(c)
             )
         )
     )
 
+
 def valid_args(values: List[Value]) -> Set[str]:
-    return {v.name for v in values}
+    return {v.prefixed_name for v in values}

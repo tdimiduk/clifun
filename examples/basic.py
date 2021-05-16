@@ -7,11 +7,12 @@ class Basic:
     a: int
     b: str = "not provided"
 
+
 def my_program(data: Basic):
     # Your actual program will go here. For this example we just print the input.
     print(data)
 
 
 if __name__ == "__main__":
-    data = clattr.build(Basic)
+    data = clattr.call(Basic)
     my_program(data)

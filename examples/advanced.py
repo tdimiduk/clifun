@@ -16,9 +16,11 @@ class Bar:
     f: Foo
     c: int
 
+
 def my_program(data: Bar):
     print(data)
 
+
 if __name__ == "__main__":
-    bar = clattr.build(Bar)
+    bar = clattr.call(Bar)
     my_program(bar)

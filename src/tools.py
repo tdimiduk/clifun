@@ -1,12 +1,16 @@
 import inspect
 import typing
-from typing import Any, Optional, Type, TypeVar, Union
+from typing import Any, Iterable, Optional, Type, TypeVar, Union
 
 S = TypeVar("S")
 T = TypeVar("T")
 O = TypeVar("O", Any, None)
 
 NOT_SPECIFIED = inspect._empty
+
+
+def get_parameters(t: Type[T]) -> Iterable[inspect.Parameter]:
+    return inspect.signature(t).parameters.values()
 
 
 def is_optional(t: Type[T]) -> bool:
@@ -23,6 +27,6 @@ def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
 
 
 def type_to_string(t: Type[O]) -> str:
-    if is_optional(t):
+     mw if is_optional(t):
         return f"Optional[{unwrap_optional(t).__name__}]"
     return t.__name__

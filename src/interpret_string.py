@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Any, Dict, Callable, TypeVar, Type, Optional, Union, overload
 
-T = TypeVar("T")
+from tools import T, is_optional, unwrap_optional
 
 
 class InterpretationError(ValueError):
@@ -22,7 +22,11 @@ class StringInterpreter:
 
     def as_type(self, s: str, t: Type[T]) -> T:
         try:
-            return self.mapping[t](s)
+            return (
+                self.mapping[unwrap_optional(t)](s)
+                if is_optional(t)
+                else self.mapping[t](s)
+            )
         except KeyError:
             raise InterpretationError(s, t)
 
