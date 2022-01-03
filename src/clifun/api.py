@@ -7,7 +7,15 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from typing import Callable, Generic, Iterable, List, Optional, Set, Type
 
 from . import interpret_string
-from .tools import NOT_SPECIFIED, T, O, get_parameters, is_optional, type_to_string, unwrap_optional
+from .tools import (
+    NOT_SPECIFIED,
+    T,
+    O,
+    get_parameters,
+    is_optional,
+    type_to_string,
+    unwrap_optional,
+)
 
 
 def call(
@@ -72,6 +80,7 @@ class ConfigFiles:
                 return config[key]
         return default
 
+
 class InputValue(Generic[O]):
     def __init__(
         self, name: str, t: Type[O], default: O, prefix: Optional[List[str]] = None
@@ -85,16 +94,6 @@ class InputValue(Generic[O]):
     def prefixed_name(self):
         return ".".join(self.prefix + [self.name])
 
-    @classmethod
-    def from_parameter(cls, p, prefix=None):
-        if prefix is None:
-            prefix = []
-        return cls(
-            name=p.name,
-            t=p.annotation,
-            default=p.default,
-            prefix=prefix,
-        )
 
 class InputSources:
     def __init__(self, args: Arguments, config_files: ConfigFiles):
@@ -188,6 +187,12 @@ def print_usage(input_values):
     print("\n".join(describe_needed(input_values)))
 
 
+def input_for_parameter(p, prefix=None) -> InputValue:
+    if prefix is None:
+        prefix = []
+    return InputValue(name=p.name, t=p.annotation, default=p.default, prefix=prefix)
+
+
 def describe_needed(input_values: List[InputValue]) -> List[str]:
     def desc(v):
         base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
@@ -199,13 +204,14 @@ def describe_needed(input_values: List[InputValue]) -> List[str]:
     return [desc(v) for v in input_values]
 
 
-
-def inputs_for_parameter(parameter, interpret, prefix: List[str]) -> Iterable[InputValue]:
+def inputs_for_parameter(
+    parameter, interpret, prefix: List[str]
+) -> Iterable[InputValue]:
     if parameter.annotation == NOT_SPECIFIED:
         raise Exception(f"Missing type annotation for {parameter}")
     t = unwrap_optional(parameter.annotation)
     if t in interpret:
-        return [InputValue.from_parameter(parameter, prefix=prefix)]
+        return [input_for_parameter(parameter, prefix=prefix)]
     prefix = prefix + [parameter.name]
     return itertools.chain(
         *(
@@ -215,7 +221,9 @@ def inputs_for_parameter(parameter, interpret, prefix: List[str]) -> Iterable[In
     )
 
 
-def inputs_for_callable(c: Callable, interpret: interpret_string.StringInterpreter) -> List[InputValue]:
+def inputs_for_callable(
+    c: Callable, interpret: interpret_string.StringInterpreter
+) -> List[InputValue]:
     return list(
         itertools.chain(
             *(
