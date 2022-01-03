@@ -12,7 +12,7 @@ python = ">=3.6.2,<4.0"
 [tool.poetry.dev-dependencies]
 black = "^21.4b2"
 isort = "^5.8.0"
-mypy = "^0.812"
+mypy = "^0.930"
 pytest = "^6.2.3"
 
 [build-system]
