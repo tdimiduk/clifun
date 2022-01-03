@@ -29,10 +29,10 @@ def call(
     Assembles the inputs to a function from command line arguments, environment variables, and config files and call it.
     """
     argv = sys.argv if args is None else args
-    all_inputs = assemble_input_sources(argv)
-    input_values = inputs_for_callable(c, interpret)
-    check_usage(all_inputs, input_values)
-    return assemble(c, collect_values(input_values, all_inputs, interpret), [])
+    provided_inputs = assemble_input_sources(argv)
+    needed_inputs = inputs_for_callable(c, interpret)
+    check_usage(provided_inputs, needed_inputs)
+    return call_with_inputs(c, provided_inputs, needed_inputs, interpret)
 
 
 ################################################################################
@@ -95,6 +95,20 @@ class InputSources:
 ################################################################################
 
 
+def call_with_inputs(
+    c: Callable[..., T],
+    provided_inputs: InputSources,
+    needed_inputs: List[InputValue],
+    interpret,
+) -> T:
+    return assemble(c, collect_values(needed_inputs, provided_inputs, interpret), [])
+
+
+def assemble_input_sources(args: List[str]) -> InputSources:
+    args_object = interpret_arguments(args)
+    return InputSources(args_object, load_config_files(args_object.positional))
+
+
 def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T:
     def find(parameter):
         new_prefix = prefix + [parameter.name]
@@ -129,11 +143,6 @@ def interpret_arguments(args: Optional[List[str]] = None) -> Arguments:
     return Arguments(positional, keyword, not (keyword or positional))
 
 
-def assemble_input_sources(args: List[str]) -> InputSources:
-    args_object = interpret_arguments(args)
-    return InputSources(args_object, load_config_files(args_object.positional))
-
-
 def load_config_files(filenames: List[str]) -> ConfigFiles:
     # reverse the order so that later config files override earlier ones
     def load(name):
@@ -146,13 +155,13 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
 
 def collect_values(
     values: List[InputValue],
-    all_inputs: InputSources,
+    provided_inputs: InputSources,
     interpret: interpret_string.StringInterpreter,
 ) -> Dict[str, Any]:
     missing = set()
 
     def get(v):
-        s = all_inputs.get_value(v)
+        s = provided_inputs.get_value(v)
         if s is None:
             if is_optional(v.t):
                 return None
@@ -177,9 +186,9 @@ def collect_values(
 ################################################################################
 
 
-def check_usage(all_inputs, input_values) -> None:
-    check_help(all_inputs, input_values)
-    check_invalid_args(all_inputs, input_values)
+def check_usage(provided_inputs, needed_inputs) -> None:
+    check_help(provided_inputs, needed_inputs)
+    check_invalid_args(provided_inputs, needed_inputs)
 
 
 def valid_args(values: List[InputValue]) -> Set[str]:
@@ -190,27 +199,27 @@ def invalid_args(args, allowed_args):
     return set(args) - valid_args(allowed_args)
 
 
-def check_invalid_args(all_inputs, input_values):
-    unknown = invalid_args(all_inputs.args.keyword.keys(), input_values)
+def check_invalid_args(provided_inputs, needed_inputs):
+    unknown = invalid_args(provided_inputs.args.keyword.keys(), needed_inputs)
     if unknown:
         print(f"Unknown arguments: {unknown}")
-        print_usage(input_values)
+        print_usage(needed_inputs)
         raise ValueError(unknown)
         sys.exit(1)
 
 
-def check_help(all_inputs, input_values):
-    if all_inputs.args.help:
-        print_usage(input_values)
+def check_help(provided_inputs, needed_inputs):
+    if provided_inputs.args.help:
+        print_usage(needed_inputs)
         sys.exit(0)
 
 
-def print_usage(input_values):
+def print_usage(needed_inputs):
     print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
-    print("\n".join(describe_needed(input_values)))
+    print("\n".join(describe_needed(needed_inputs)))
 
 
-def describe_needed(input_values: List[InputValue]) -> List[str]:
+def describe_needed(needed_inputs: List[InputValue]) -> List[str]:
     def desc(v):
         base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
         if v.default != NOT_SPECIFIED:
@@ -218,7 +227,7 @@ def describe_needed(input_values: List[InputValue]) -> List[str]:
             return f"{base} (default: {default})"
         return base
 
-    return [desc(v) for v in input_values]
+    return [desc(v) for v in needed_inputs]
 
 
 ################################################################################
