@@ -18,6 +18,13 @@ def is_optional(t: Type[T]) -> bool:
 
 
 def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
+    if hasattr(typing, 'get_args'):
+        args = typing.get_args(t)
+        if len(args) == 0:
+            return t
+        else:
+            return args[0]
+    # fallback for python < 3.8. May be brittle since it depends on an `_`'d interface
     # this should use typing.get_args, but that is not available until python 3.8
     if type(t) != typing._GenericAlias:
         return t
