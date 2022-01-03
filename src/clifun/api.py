@@ -20,11 +20,11 @@ def call(
     Assembles the inputs to a function from command line arguments, environment variables, and config files and call it.
     """
     argv = sys.argv if args is None else args
-    source = assemble_input_sources(argv)
+    all_inputs = assemble_input_sources(argv)
     input_values = inputs.for_callable(c, interpret)
-    check_help(source, input_values)
-    check_invalid_args(source, input_values)
-    return assemble(c, collect_values(input_values, source, interpret), [])
+    check_help(all_inputs, input_values)
+    check_invalid_args(all_inputs, input_values)
+    return assemble(c, collect_values(input_values, all_inputs, interpret), [])
 
 
 class Arguments:
@@ -72,7 +72,7 @@ class ConfigFiles:
         return default
 
 
-class Source:
+class InputSources:
     def __init__(self, args: Arguments, config_files: ConfigFiles):
         self.args = args
         self.config_files = config_files
@@ -85,9 +85,9 @@ class Source:
         return self.get(value.prefixed_name, value.default)
 
 
-def assemble_input_sources(args: List[str]) -> Source:
+def assemble_input_sources(args: List[str]) -> InputSources:
     args_object = interpret_arguments(args)
-    return Source(args_object, load_config_files(args_object.positional))
+    return InputSources(args_object, load_config_files(args_object.positional))
 
 
 def load_config_files(filenames: List[str]) -> ConfigFiles:
@@ -114,13 +114,13 @@ def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T
 
 def collect_values(
     values: List[inputs.Value],
-    source: Source,
+    all_inputs: InputSources,
     interpret: interpret_string.StringInterpreter,
 ) -> Dict[str, Any]:
     missing = set()
 
     def get(v):
-        s = source.get_value(v)
+        s = all_inputs.get_value(v)
         if s is None:
             if is_optional(v.t):
                 return None
@@ -144,8 +144,8 @@ def invalid_args(args, allowed_args):
     return set(args) - inputs.valid_args(allowed_args)
 
 
-def check_invalid_args(source, input_values):
-    unknown = invalid_args(source.args.keyword.keys(), input_values)
+def check_invalid_args(all_inputs, input_values):
+    unknown = invalid_args(all_inputs.args.keyword.keys(), input_values)
     if unknown:
         print(f"Unknown arguments: {unknown}")
         print_usage(input_values)
@@ -153,8 +153,8 @@ def check_invalid_args(source, input_values):
         sys.exit(1)
 
 
-def check_help(source, input_values):
-    if source.args.help:
+def check_help(all_inputs, input_values):
+    if all_inputs.args.help:
         print_usage(input_values)
         sys.exit(0)
 
