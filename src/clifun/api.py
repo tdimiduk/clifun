@@ -31,9 +31,16 @@ def call(
     argv = sys.argv if args is None else args
     all_inputs = assemble_input_sources(argv)
     input_values = inputs_for_callable(c, interpret)
-    check_help(all_inputs, input_values)
-    check_invalid_args(all_inputs, input_values)
+    check_usage(all_inputs, input_values)
     return assemble(c, collect_values(input_values, all_inputs, interpret), [])
+
+
+################################################################################
+# Data classes
+#
+# these should really be dataclasses, and will be converted when clifun drops compatability
+# with python 3.6
+################################################################################
 
 
 class Arguments:
@@ -43,31 +50,6 @@ class Arguments:
         self.positional = positional
         self.keyword = keyword
         self.help = help
-
-    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        return self.keyword.get(key, default)
-
-
-def interpret_arguments(args: Optional[List[str]] = None) -> Arguments:
-    if args is None:
-        args = sys.argv
-    i = 1
-    keyword = {}
-    positional = []
-    while i < len(args):
-        arg = args[i]
-        key = arg[2:]
-        if arg in {"-h", "--help"}:
-            return Arguments([], {}, True)
-        if arg[:2] == "--":
-            if len(args) < i + 2:
-                raise ValueError(f"Missing value for argument: {key}")
-            keyword[key] = args[i + 1]
-            i += 2
-        else:
-            positional.append(arg)
-            i += 1
-    return Arguments(positional, keyword, not (keyword or positional))
 
 
 class ConfigFiles:
@@ -105,7 +87,46 @@ class InputSources:
         return self.args.get(key, self.config_files.get(key, env_value))
 
     def get_value(self, value: InputValue) -> Union[str, T, None]:
-        return self.get(value.prefixed_name, value.default)
+        return self.args.keyword.get(value.prefixed_name, value.default)
+
+
+################################################################################
+# Assemble inputs from the "outside world"
+################################################################################
+
+
+def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T:
+    def find(parameter):
+        new_prefix = prefix + [parameter.name]
+        prefixed_name = ".".join(new_prefix)
+        if prefixed_name in collected_values:
+            return collected_values[prefixed_name]
+        return assemble(parameter.annotation, collected_values, new_prefix)
+
+    d: dict = {parameter.name: find(parameter) for parameter in get_parameters(c)}
+    return c(**d)
+
+
+def interpret_arguments(args: Optional[List[str]] = None) -> Arguments:
+    if args is None:
+        args = sys.argv
+    i = 1
+    keyword = {}
+    positional = []
+    while i < len(args):
+        arg = args[i]
+        key = arg[2:]
+        if arg in {"-h", "--help"}:
+            return Arguments([], {}, True)
+        if arg[:2] == "--":
+            if len(args) < i + 2:
+                raise ValueError(f"Missing value for argument: {key}")
+            keyword[key] = args[i + 1]
+            i += 2
+        else:
+            positional.append(arg)
+            i += 1
+    return Arguments(positional, keyword, not (keyword or positional))
 
 
 def assemble_input_sources(args: List[str]) -> InputSources:
@@ -121,18 +142,6 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
         return json.load(open(name))
 
     return ConfigFiles([load(name) for name in filenames[::-1]])
-
-
-def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T:
-    def find(parameter):
-        new_prefix = prefix + [parameter.name]
-        prefixed_name = ".".join(new_prefix)
-        if prefixed_name in collected_values:
-            return collected_values[prefixed_name]
-        return assemble(parameter.annotation, collected_values, new_prefix)
-
-    d: dict = {parameter.name: find(parameter) for parameter in get_parameters(c)}
-    return c(**d)
 
 
 def collect_values(
@@ -163,6 +172,20 @@ def collect_values(
     return collected
 
 
+################################################################################
+# Input validation and help
+################################################################################
+
+
+def check_usage(all_inputs, input_values) -> None:
+    check_help(all_inputs, input_values)
+    check_invalid_args(all_inputs, input_values)
+
+
+def valid_args(values: List[InputValue]) -> Set[str]:
+    return {v.prefixed_name for v in values}
+
+
 def invalid_args(args, allowed_args):
     return set(args) - valid_args(allowed_args)
 
@@ -187,12 +210,6 @@ def print_usage(input_values):
     print("\n".join(describe_needed(input_values)))
 
 
-def input_for_parameter(p, prefix=None) -> InputValue:
-    if prefix is None:
-        prefix = []
-    return InputValue(name=p.name, t=p.annotation, default=p.default, prefix=prefix)
-
-
 def describe_needed(input_values: List[InputValue]) -> List[str]:
     def desc(v):
         base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
@@ -202,6 +219,17 @@ def describe_needed(input_values: List[InputValue]) -> List[str]:
         return base
 
     return [desc(v) for v in input_values]
+
+
+################################################################################
+# Determine what inputs a function needs
+################################################################################
+
+
+def input_for_parameter(p, prefix=None) -> InputValue:
+    if prefix is None:
+        prefix = []
+    return InputValue(name=p.name, t=p.annotation, default=p.default, prefix=prefix)
 
 
 def inputs_for_parameter(
@@ -232,7 +260,3 @@ def inputs_for_callable(
             )
         )
     )
-
-
-def valid_args(values: List[InputValue]) -> Set[str]:
-    return {v.prefixed_name for v in values}
