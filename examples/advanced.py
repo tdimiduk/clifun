@@ -1,7 +1,8 @@
-from typing import Optional
 import datetime as dt
+from typing import Optional
 
 import attr
+
 import clifun
 
 

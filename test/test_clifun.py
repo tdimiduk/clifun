@@ -2,8 +2,8 @@ import datetime as dt
 import pathlib
 import sys
 
-import clifun
 import pytest
+
 import clifun
 
 sys.path.append(str(pathlib.Path(__file__).parents[1] / "examples"))

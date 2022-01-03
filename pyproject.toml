@@ -10,6 +10,7 @@ readme = "README.md"
 python = ">=3.6.2,<4.0"
 
 [tool.poetry.dev-dependencies]
+autoflake = "^1.4"
 black = "^21.4b2"
 isort = "^5.8.0"
 mypy = "^0.930"

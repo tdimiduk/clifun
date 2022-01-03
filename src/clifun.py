@@ -1,13 +1,15 @@
-import json
 import datetime as dt
+import inspect
+import itertools
+import json
 import os
 import pathlib
 import sys
-import itertools
 import typing
-from typing import Any, Callable, Dict, List, Optional, Union
 from typing import (
+    Any,
     Callable,
+    Dict,
     Generic,
     Iterable,
     List,
@@ -17,8 +19,6 @@ from typing import (
     TypeVar,
     Union,
 )
-import inspect
-
 
 S = TypeVar("S")
 T = TypeVar("T")
