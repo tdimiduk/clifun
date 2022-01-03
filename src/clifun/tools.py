@@ -18,7 +18,7 @@ def is_optional(t: Type[T]) -> bool:
 
 
 def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
-    if hasattr(typing, 'get_args'):
+    if hasattr(typing, "get_args"):
         args = typing.get_args(t)
         if len(args) == 0:
             return t

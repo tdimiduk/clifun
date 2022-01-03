@@ -6,7 +6,9 @@ from .tools import NOT_SPECIFIED, O, get_parameters, unwrap_optional
 
 
 class Value(Generic[O]):
-    def __init__(self, name: str, t: Type[O], default: O, prefix: Optional[List[str]] = None):
+    def __init__(
+        self, name: str, t: Type[O], default: O, prefix: Optional[List[str]] = None
+    ):
         self.name = name
         self.t = t
         self.default = default

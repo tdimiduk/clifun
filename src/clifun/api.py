@@ -8,8 +8,11 @@ from . import inputs
 from . import interpret_string
 from .tools import NOT_SPECIFIED, T, get_parameters, is_optional, type_to_string
 
+
 def call(
-    c: Callable[..., T], args: Optional[List[str]] = None, interpret=interpret_string.interpret
+    c: Callable[..., T],
+    args: Optional[List[str]] = None,
+    interpret=interpret_string.interpret,
 ) -> T:
     """
     Call a function from the command line
@@ -34,6 +37,7 @@ class Arguments:
 
     def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         return self.keyword.get(key, default)
+
 
 def interpret_arguments(args: Optional[List[str]] = None) -> Arguments:
     if args is None:
@@ -69,9 +73,7 @@ class ConfigFiles:
 
 
 class Source:
-    def __init__(
-        self, args: Arguments, config_files: ConfigFiles
-    ):
+    def __init__(self, args: Arguments, config_files: ConfigFiles):
         self.args = args
         self.config_files = config_files
 
@@ -81,6 +83,7 @@ class Source:
 
     def get_value(self, value: inputs.Value) -> Union[str, T, None]:
         return self.get(value.prefixed_name, value.default)
+
 
 def assemble_input_sources(args: List[str]) -> Source:
     args_object = interpret_arguments(args)
@@ -110,7 +113,9 @@ def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T
 
 
 def collect_values(
-    values: List[inputs.Value], source: Source, interpret: interpret_string.StringInterpreter
+    values: List[inputs.Value],
+    source: Source,
+    interpret: interpret_string.StringInterpreter,
 ) -> Dict[str, Any]:
     missing = set()
 
@@ -168,5 +173,3 @@ def describe_needed(input_values: List[inputs.Value]) -> List[str]:
         return base
 
     return [desc(v) for v in input_values]
-
-
