@@ -1,4 +1,5 @@
 import json
+import datetime as dt
 import os
 import pathlib
 import sys
@@ -6,7 +7,6 @@ import itertools
 from typing import Any, Callable, Dict, List, Optional, Union
 from typing import Callable, Generic, Iterable, List, Optional, Set, Type
 
-from . import interpret_string
 from .tools import (
     NOT_SPECIFIED,
     T,
@@ -17,9 +17,13 @@ from .tools import (
     unwrap_optional,
 )
 
+StringInterpreters = Dict[Type[T], Callable[[str], T]]
+
 
 def call(
-    c: Callable[..., T], args: Optional[List[str]] = None, string_interpreters=None
+    c: Callable[..., T],
+    args: Optional[List[str]] = None,
+    string_interpreters: Optional[StringInterpreters] = None,
 ) -> T:
     """
     Call a function from the command line
@@ -30,12 +34,73 @@ def call(
     interpreters = (
         string_interpreters
         if string_interpreters is not None
-        else interpret_string.default_string_interpreters()
+        else default_string_interpreters()
     )
     provided_inputs = assemble_input_sources(argv)
     needed_inputs = inputs_for_callable(c, interpreters)
     check_usage(provided_inputs, needed_inputs)
     return call_with_inputs(c, provided_inputs, needed_inputs)
+
+
+################################################################################
+# Interpreting strings into python types
+################################################################################
+
+
+def default_string_interpreters() -> StringInterpreters:
+    return {
+        int: int,
+        float: float,
+        str: str,
+        bool: interpret_bool,
+        dt.datetime: interpret_datetime,
+        dt.date: interpret_date,
+    }
+
+
+class InterpretationError(ValueError):
+    def __init__(self, s: str, t: T):
+        self.s = s
+        self.t = t
+
+    def __str__(self):
+        return f"Could not interpret '{self.s}' as {self.t}"
+
+
+def interpret_bool(s: str) -> bool:
+    if s.lower() in {"t", "true", "yes", "y"}:
+        return True
+    elif s.lower() in {"f", "false", "no", "n"}:
+        return False
+    else:
+        raise InterpretationError(s, bool)
+
+
+def interpret_datetime(s: str) -> dt.datetime:
+    if hasattr(dt.datetime, "fromisoformat"):
+        return dt.datetime.fromisoformat(s)
+    else:
+        # for python 3.6 where `fromisoformat` doesn't exist
+        import isodate  # type: ignore
+
+        return isodate.parse_datetime(s)
+
+
+def interpret_date(s: str) -> dt.date:
+    return dt.date(*[int(i) for i in s.split("-")])
+
+
+def interpret_string_as_type(
+    s: str, t: Type[T], type_converters: StringInterpreters
+) -> T:
+    try:
+        return (
+            type_converters[unwrap_optional(t)](s)
+            if is_optional(t)
+            else type_converters[t](s)
+        )
+    except KeyError:
+        raise InterpretationError(s, t)
 
 
 ################################################################################
@@ -267,9 +332,7 @@ def inputs_for_parameter(
     )
 
 
-def inputs_for_callable(
-    c: Callable, interpreter
-) -> List[InputValue]:
+def inputs_for_callable(c: Callable, interpreter) -> List[InputValue]:
     return list(
         itertools.chain(
             *(
