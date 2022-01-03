@@ -32,7 +32,7 @@ def call(
     provided_inputs = assemble_input_sources(argv)
     needed_inputs = inputs_for_callable(c, interpret)
     check_usage(provided_inputs, needed_inputs)
-    return call_with_inputs(c, provided_inputs, needed_inputs, interpret)
+    return call_with_inputs(c, provided_inputs, needed_inputs)
 
 
 ################################################################################
@@ -65,9 +65,15 @@ class ConfigFiles:
 
 class InputValue(Generic[O]):
     def __init__(
-        self, name: str, t: Type[O], default: O, prefix: Optional[List[str]] = None
+        self,
+        name: str,
+        t: Type[O],
+        convert_from_string: Callable[[str], O],
+        default: O,
+        prefix: Optional[List[str]] = None,
     ):
         self.name = name
+        self.convert_from_string = convert_from_string
         self.t = t
         self.default = default
         self.prefix = [] if prefix is None else prefix
@@ -96,12 +102,9 @@ class InputSources:
 
 
 def call_with_inputs(
-    c: Callable[..., T],
-    provided_inputs: InputSources,
-    needed_inputs: List[InputValue],
-    interpret,
+    c: Callable[..., T], provided_inputs: InputSources, needed_inputs: List[InputValue]
 ) -> T:
-    return assemble(c, collect_values(needed_inputs, provided_inputs, interpret), [])
+    return assemble(c, collect_values(needed_inputs, provided_inputs), [])
 
 
 def assemble_input_sources(args: List[str]) -> InputSources:
@@ -154,9 +157,7 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
 
 
 def collect_values(
-    values: List[InputValue],
-    provided_inputs: InputSources,
-    interpret: interpret_string.StringInterpreter,
+    provided_inputs: List[InputValue], provided_inputs: InputSources
 ) -> Dict[str, Any]:
     missing = set()
 
@@ -173,9 +174,9 @@ def collect_values(
         if s == NOT_SPECIFIED:
             missing.add(v.prefixed_name)
             return s
-        return interpret.as_type(s, v.t)
+        return v.convert_from_string(s)
 
-    collected = {value.prefixed_name: get(value) for value in values}
+    collected = {value.prefixed_name: get(value) for value in provided_inputs}
     if missing:
         raise ValueError(f"Missing arguments: {missing}")
     return collected
@@ -235,12 +236,6 @@ def describe_needed(needed_inputs: List[InputValue]) -> List[str]:
 ################################################################################
 
 
-def input_for_parameter(p, prefix=None) -> InputValue:
-    if prefix is None:
-        prefix = []
-    return InputValue(name=p.name, t=p.annotation, default=p.default, prefix=prefix)
-
-
 def inputs_for_parameter(
     parameter, interpret, prefix: List[str]
 ) -> Iterable[InputValue]:
@@ -248,7 +243,18 @@ def inputs_for_parameter(
         raise Exception(f"Missing type annotation for {parameter}")
     t = unwrap_optional(parameter.annotation)
     if t in interpret:
-        return [input_for_parameter(parameter, prefix=prefix)]
+        # We have found a "basic" value we know how to interpret
+        return [
+            InputValue(
+                name=parameter.name,
+                t=parameter.annotation,
+                convert_from_string=interpret[t],
+                default=parameter.default,
+                prefix=prefix,
+            )
+        ]
+
+    # This is some kind of composite
     prefix = prefix + [parameter.name]
     return itertools.chain(
         *(
