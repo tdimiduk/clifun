@@ -19,9 +19,7 @@ from .tools import (
 
 
 def call(
-    c: Callable[..., T],
-    args: Optional[List[str]] = None,
-    interpret=interpret_string.interpret,
+    c: Callable[..., T], args: Optional[List[str]] = None, string_interpreters=None
 ) -> T:
     """
     Call a function from the command line
@@ -29,8 +27,13 @@ def call(
     Assembles the inputs to a function from command line arguments, environment variables, and config files and call it.
     """
     argv = sys.argv if args is None else args
+    interpreters = (
+        string_interpreters
+        if string_interpreters is not None
+        else interpret_string.default_string_interpreters()
+    )
     provided_inputs = assemble_input_sources(argv)
-    needed_inputs = inputs_for_callable(c, interpret)
+    needed_inputs = inputs_for_callable(c, interpreters)
     check_usage(provided_inputs, needed_inputs)
     return call_with_inputs(c, provided_inputs, needed_inputs)
 
@@ -157,7 +160,7 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
 
 
 def collect_values(
-    provided_inputs: List[InputValue], provided_inputs: InputSources
+    needed_inputs: List[InputValue], provided_inputs: InputSources
 ) -> Dict[str, Any]:
     missing = set()
 
@@ -176,7 +179,7 @@ def collect_values(
             return s
         return v.convert_from_string(s)
 
-    collected = {value.prefixed_name: get(value) for value in provided_inputs}
+    collected = {value.prefixed_name: get(value) for value in needed_inputs}
     if missing:
         raise ValueError(f"Missing arguments: {missing}")
     return collected
@@ -237,18 +240,18 @@ def describe_needed(needed_inputs: List[InputValue]) -> List[str]:
 
 
 def inputs_for_parameter(
-    parameter, interpret, prefix: List[str]
+    parameter, interpreter, prefix: List[str]
 ) -> Iterable[InputValue]:
     if parameter.annotation == NOT_SPECIFIED:
         raise Exception(f"Missing type annotation for {parameter}")
     t = unwrap_optional(parameter.annotation)
-    if t in interpret:
+    if t in interpreter:
         # We have found a "basic" value we know how to interpret
         return [
             InputValue(
                 name=parameter.name,
                 t=parameter.annotation,
-                convert_from_string=interpret[t],
+                convert_from_string=interpreter[t],
                 default=parameter.default,
                 prefix=prefix,
             )
@@ -258,19 +261,19 @@ def inputs_for_parameter(
     prefix = prefix + [parameter.name]
     return itertools.chain(
         *(
-            inputs_for_parameter(parameter, interpret, prefix)
+            inputs_for_parameter(parameter, interpreter, prefix)
             for parameter in get_parameters(t)
         )
     )
 
 
 def inputs_for_callable(
-    c: Callable, interpret: interpret_string.StringInterpreter
+    c: Callable, interpreter
 ) -> List[InputValue]:
     return list(
         itertools.chain(
             *(
-                inputs_for_parameter(parameter, interpret, [])
+                inputs_for_parameter(parameter, interpreter, [])
                 for parameter in get_parameters(c)
             )
         )

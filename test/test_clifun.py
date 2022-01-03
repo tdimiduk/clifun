@@ -26,7 +26,7 @@ def test_basic():
 
 
 def test_check_unused():
-    input_args = api.inputs_for_callable(basic.Basic, interpret_string.interpret)
+    input_args = api.inputs_for_callable(basic.Basic, interpret_string.default_string_interpreters())
     assert api.invalid_args(["c", "a"], input_args) == {"c"}
 
 

@@ -12,31 +12,6 @@ class InterpretationError(ValueError):
     def __str__(self):
         return f"Could not interpret '{self.s}' as {self.t}"
 
-
-class StringInterpreter:
-    def __init__(self, mapping: Dict[Type[T], Callable[[str], T]] = {}):
-        self.mapping = mapping
-
-    def register(self, t: Type[T], converter: Callable[[str], T]) -> None:
-        self.mapping[t] = converter
-
-    def as_type(self, s: str, t: Type[T]) -> T:
-        try:
-            return (
-                self.mapping[unwrap_optional(t)](s)
-                if is_optional(t)
-                else self.mapping[t](s)
-            )
-        except KeyError:
-            raise InterpretationError(s, t)
-
-    def __contains__(self, t: T) -> bool:
-        return t in self.mapping
-
-    def __getitem__(self, t: T) -> Callable[[str], T]:
-        return self.mapping[t]
-
-
 def interpret_bool(s: str) -> bool:
     if s.lower() in {"t", "true", "yes", "y"}:
         return True
@@ -60,10 +35,28 @@ def interpret_date(s: str) -> dt.date:
     return dt.date(*[int(i) for i in s.split("-")])
 
 
-interpret = StringInterpreter()
-interpret.register(int, int)
-interpret.register(float, float)
-interpret.register(str, str)
-interpret.register(bool, interpret_bool)
-interpret.register(dt.datetime, interpret_datetime)
-interpret.register(dt.date, interpret_date)
+StringInterpreters = Dict[Type[T], Callable[[str], T]]
+
+
+def default_string_interpreters() -> StringInterpreters:
+    return {
+        int: int,
+        float: float,
+        str: str,
+        bool: interpret_bool,
+        dt.datetime: interpret_datetime,
+        dt.date: interpret_date,
+    }
+
+
+def interpret_string_as_type(
+    s: str, t: Type[T], type_converters: StringInterpreters
+) -> T:
+    try:
+        return (
+            type_converters[unwrap_optional(t)](s)
+            if is_optional(t)
+            else type_converters[t](s)
+        )
+    except KeyError:
+        raise InterpretationError(s, t)
