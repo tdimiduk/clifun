@@ -1,18 +1,18 @@
-# clattr
+# clifun
 
-Easily make a command line interface from any interface in your code. How easily? This easy:
+Because cli's should be fun(ctions) ;).
 
 ```
-import clattr
+import clifun
 
 def my_program(a: int, b: str = "not provided"):
   print(f"Running some code with: a={a}, b={b}")
 
 if __name__ == "__main__":
-  clattr.call(my_program)
+  clifun.call(my_program)
 ```
 
-That's all it takes. Clattr will inspect your function and collect the values it needs it from command line arguments, environment variables, or config files, and then call it.
+That's all it takes. Clifun will inspect your function and collect the values it needs it from command line arguments, environment variables, or config files, and then call it.
 
 ```
 python examples/function --a 1
@@ -22,11 +22,11 @@ Running some code with: a=1, b=not provided
 ```
 
 
-If you want to think in a more data oriented design, you can have clattr construct a data object for you and use it as you please. 
+If you want to think in a more data oriented design, you can have clifun construct a data object for you and use it as you please. 
 
 ```
 import attr
-import clattr
+import clifun
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -40,7 +40,7 @@ def my_program(data: Basic):
 
 
 if __name__ == "__main__":
-    data = clattr.call(Basic)
+    data = clifun.call(Basic)
     my_program(data)
 ```
 
@@ -48,7 +48,7 @@ This could be invoked as
 ```
 python examples/basic.py --a 1 --b hi
 ```
-clattr will construct this object
+clifun will construct this object
 ```
 Basic(a=1, b='hi')
 ```
@@ -66,14 +66,14 @@ again yields
 Basic(a=1, b='hi')
 ```
 
-`clattr` also supports nested objects (or functions taking complex objects as inputs)
+`clifun` also supports nested objects (or functions taking complex objects as inputs)
 
 ```
 from typing import Optional
 import datetime as dt
 
 import attr
-import clattr
+import clifun
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -91,7 +91,7 @@ def my_program(data: Bar):
     print(data)
 
 if __name__ == "__main__":
-    bar = clattr.call(Bar)
+    bar = clifun.call(Bar)
     my_program(bar)
 ```
 
@@ -104,7 +104,7 @@ python examples/advanced.py --c 1 --f.a 2020-01-01 --f.b hi
 Bar(f=Foo(a=1, b='hi'), c=1)
 ```
 
-You can also supply one or more `json` formatted `config` files. Provide the name(s) of these files as positional arguments. `clattr`` will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
+You can also supply one or more `json` formatted `config` files. Provide the name(s) of these files as positional arguments. `clifun`` will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
 
 ```
 python examples/advanced.py --c 1 examples/foo.json
@@ -113,6 +113,6 @@ python examples/advanced.py --c 1 examples/foo.json
 Bar(f=Foo(a=1, b='str'), c=1)
 ```
 
-`clattr` is inspired by [clout](https://github.com/python-clout/clout), but I wanted to try being a bit more opinionated to make both the library and code using it simpler.
+`clifun` is inspired by [clout](https://github.com/python-clout/clout), but I wanted to try being a bit more opinionated to make both the library and code using it simpler.
 
 

@@ -1,5 +1,5 @@
 import attr
-import clattr
+import clifun
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -14,5 +14,5 @@ def my_program(data: Basic):
 
 
 if __name__ == "__main__":
-    data = clattr.call(Basic)
+    data = clifun.call(Basic)
     my_program(data)

@@ -2,7 +2,7 @@ from typing import Optional
 import datetime as dt
 
 import attr
-import clattr
+import clifun
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -22,5 +22,5 @@ def my_program(data: Bar):
 
 
 if __name__ == "__main__":
-    bar = clattr.call(Bar)
+    bar = clifun.call(Bar)
     my_program(bar)

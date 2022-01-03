@@ -1,4 +1,4 @@
-import clattr
+import clifun
 
 
 def my_program(a: int, b: str = "not provided"):
@@ -6,4 +6,4 @@ def my_program(a: int, b: str = "not provided"):
   return (a, b)
 
 if __name__ == "__main__":
-    clattr.call(my_program)
+    clifun.call(my_program)

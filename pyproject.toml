@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "clattr"
+name = "clifun"
 version = "0.0.1"
 description = "Construct a comand line interface based on a function or class"
 authors = ["Tom Dimiduk <tom@dimiduk.net>"]
