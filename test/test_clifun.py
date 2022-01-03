@@ -4,7 +4,7 @@ import sys
 
 import clifun
 import pytest
-from clifun import api, inputs, interpret_string
+from clifun import api, interpret_string
 
 sys.path.append(str(pathlib.Path(__file__).parents[1] / "examples"))
 print(sys.path)
@@ -26,7 +26,7 @@ def test_basic():
 
 
 def test_check_unused():
-    input_args = inputs.for_callable(basic.Basic, interpret_string.interpret)
+    input_args = api.inputs_for_callable(basic.Basic, interpret_string.interpret)
     assert api.invalid_args(["c", "a"], input_args) == {"c"}
 
 

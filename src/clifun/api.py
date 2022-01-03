@@ -2,11 +2,12 @@ import json
 import os
 import pathlib
 import sys
+import itertools
 from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Callable, Generic, Iterable, List, Optional, Set, Type
 
-from . import inputs
 from . import interpret_string
-from .tools import NOT_SPECIFIED, T, get_parameters, is_optional, type_to_string
+from .tools import NOT_SPECIFIED, T, O, get_parameters, is_optional, type_to_string, unwrap_optional
 
 
 def call(
@@ -21,7 +22,7 @@ def call(
     """
     argv = sys.argv if args is None else args
     all_inputs = assemble_input_sources(argv)
-    input_values = inputs.for_callable(c, interpret)
+    input_values = inputs_for_callable(c, interpret)
     check_help(all_inputs, input_values)
     check_invalid_args(all_inputs, input_values)
     return assemble(c, collect_values(input_values, all_inputs, interpret), [])
@@ -71,6 +72,29 @@ class ConfigFiles:
                 return config[key]
         return default
 
+class InputValue(Generic[O]):
+    def __init__(
+        self, name: str, t: Type[O], default: O, prefix: Optional[List[str]] = None
+    ):
+        self.name = name
+        self.t = t
+        self.default = default
+        self.prefix = [] if prefix is None else prefix
+
+    @property
+    def prefixed_name(self):
+        return ".".join(self.prefix + [self.name])
+
+    @classmethod
+    def from_parameter(cls, p, prefix=None):
+        if prefix is None:
+            prefix = []
+        return cls(
+            name=p.name,
+            t=p.annotation,
+            default=p.default,
+            prefix=prefix,
+        )
 
 class InputSources:
     def __init__(self, args: Arguments, config_files: ConfigFiles):
@@ -81,7 +105,7 @@ class InputSources:
         env_value = os.environ.get(key.upper(), default)
         return self.args.get(key, self.config_files.get(key, env_value))
 
-    def get_value(self, value: inputs.Value) -> Union[str, T, None]:
+    def get_value(self, value: InputValue) -> Union[str, T, None]:
         return self.get(value.prefixed_name, value.default)
 
 
@@ -113,7 +137,7 @@ def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T
 
 
 def collect_values(
-    values: List[inputs.Value],
+    values: List[InputValue],
     all_inputs: InputSources,
     interpret: interpret_string.StringInterpreter,
 ) -> Dict[str, Any]:
@@ -141,7 +165,7 @@ def collect_values(
 
 
 def invalid_args(args, allowed_args):
-    return set(args) - inputs.valid_args(allowed_args)
+    return set(args) - valid_args(allowed_args)
 
 
 def check_invalid_args(all_inputs, input_values):
@@ -164,7 +188,7 @@ def print_usage(input_values):
     print("\n".join(describe_needed(input_values)))
 
 
-def describe_needed(input_values: List[inputs.Value]) -> List[str]:
+def describe_needed(input_values: List[InputValue]) -> List[str]:
     def desc(v):
         base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
         if v.default != NOT_SPECIFIED:
@@ -173,3 +197,34 @@ def describe_needed(input_values: List[inputs.Value]) -> List[str]:
         return base
 
     return [desc(v) for v in input_values]
+
+
+
+def inputs_for_parameter(parameter, interpret, prefix: List[str]) -> Iterable[InputValue]:
+    if parameter.annotation == NOT_SPECIFIED:
+        raise Exception(f"Missing type annotation for {parameter}")
+    t = unwrap_optional(parameter.annotation)
+    if t in interpret:
+        return [InputValue.from_parameter(parameter, prefix=prefix)]
+    prefix = prefix + [parameter.name]
+    return itertools.chain(
+        *(
+            inputs_for_parameter(parameter, interpret, prefix)
+            for parameter in get_parameters(t)
+        )
+    )
+
+
+def inputs_for_callable(c: Callable, interpret: interpret_string.StringInterpreter) -> List[InputValue]:
+    return list(
+        itertools.chain(
+            *(
+                inputs_for_parameter(parameter, interpret, [])
+                for parameter in get_parameters(c)
+            )
+        )
+    )
+
+
+def valid_args(values: List[InputValue]) -> Set[str]:
+    return {v.prefixed_name for v in values}
