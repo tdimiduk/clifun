@@ -77,7 +77,7 @@ python examples/advanced.py --c 1 --f.a 2020-01-01 --f.b hi
 Bar(f=Foo(a=datetime.datetime(2021, 1, 1, 0, 0), b='hi'), c=1)
 ```
 
-You can also supply one or more `json` formatted `config` files. Provide the name(s) of these files as positional arguments. `clifun`` will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
+You can also supply one or more `json` formatted `config` files. Provide the name(s) of these files as positional arguments. `clifun` will search them, last file first, for any keys fields that are not provided at the command line before searching the environment.
 
 ```
 python examples/advanced.py --c 1 examples/foo.json
