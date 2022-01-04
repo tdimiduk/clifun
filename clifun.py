@@ -1,4 +1,5 @@
 import datetime as dt
+import importlib.util
 import inspect
 import itertools
 import json
@@ -74,6 +75,11 @@ class InterpretationError(ValueError):
 
 
 def interpret_bool(s: str) -> bool:
+    """
+    Slightly more intuitive bool iterpretation
+
+    Raw python's `bool("false")==True` since it is a non-empty string
+    """
     if s.lower() in {"t", "true", "yes", "y"}:
         return True
     elif s.lower() in {"f", "false", "no", "n"}:
@@ -83,6 +89,9 @@ def interpret_bool(s: str) -> bool:
 
 
 def interpret_datetime(s: str) -> dt.datetime:
+    """
+    Date and time in isoformat
+    """
     if hasattr(dt.datetime, "fromisoformat"):
         return dt.datetime.fromisoformat(s)
     else:
@@ -93,6 +102,9 @@ def interpret_datetime(s: str) -> dt.datetime:
 
 
 def interpret_date(s: str) -> dt.date:
+    """
+    Dates in YYYY-MM-DD format
+    """
     return dt.date(*[int(i) for i in s.split("-")])
 
 
@@ -380,3 +392,14 @@ def type_to_string(t: Type[O]) -> str:
     if is_optional(t):
         return f"Optional[{unwrap_optional(t).__name__}]"
     return t.__name__
+
+if __name__ == "__main__":
+   target = pathlib.Path(sys.argv[1]).resolve()
+   function_name = sys.argv[2]
+   arguments = sys.argv[2:]
+   print(f"importing {target.parent} {target.name}")
+   spec = importlib.util.spec_from_file_location(target.name, str(target))
+   module = importlib.util.module_from_spec(spec)
+   spec.loader.exec_module(module)
+   function = getattr(module, function_name)
+   call(function, arguments)
