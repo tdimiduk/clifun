@@ -177,10 +177,10 @@ class InputSources:
 
     def get(self, key: str, default: Optional[T] = None) -> Union[str, T, None]:
         env_value = os.environ.get(key.upper(), default)
-        return self.args.get(key, self.config_files.get(key, env_value))
+        return self.args.keyword.get(key, self.config_files.get(key, env_value))
 
     def get_value(self, value: InputValue) -> Union[str, T, None]:
-        return self.args.keyword.get(value.prefixed_name, value.default)
+        return self.get(value.prefixed_name, value.default)
 
 
 ################################################################################
@@ -411,4 +411,4 @@ if __name__ == "__main__":
    arguments = sys.argv[2:]
    module = import_module_by_path(target)
    function = getattr(module, function_name)
-   call(function, arguments)
+   print(call(function, arguments))

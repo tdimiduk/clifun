@@ -1,8 +1,7 @@
-import datetime as dt
 from typing import Optional
+import datetime as dt
 
 import attr
-
 import clifun
 
 
@@ -18,10 +17,6 @@ class Bar:
     c: int
 
 
-def my_program(data: Bar):
-    print(data)
-
-
 if __name__ == "__main__":
-    bar = clifun.call(Bar)
-    my_program(bar)
+    bar = clattr.call(Bar)
+    print(bar)
