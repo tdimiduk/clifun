@@ -406,6 +406,10 @@ def import_module_by_path(path: pathlib.Path) -> types.ModuleType:
 
 
 if __name__ == "__main__":
+   print(sys.argv)
+   if len(sys.argv) < 3:
+       print("Usage: clifun.py path_to_module function_name ...")
+       sys.exit(1)
    target = pathlib.Path(sys.argv[1]).resolve()
    function_name = sys.argv[2]
    arguments = sys.argv[2:]

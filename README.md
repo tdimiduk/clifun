@@ -26,6 +26,11 @@ You can even run functions in any module without modifying the module at all
 ```
 python clifun.py examples/module.py my_program --a 1
 ```
+if you have the code checked out. Or if you pip installed
+
+```
+python -m clifun some_module.py function ...
+```
 
 Or if you have environment variables defined
 
