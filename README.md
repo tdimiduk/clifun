@@ -12,7 +12,7 @@ if __name__ == "__main__":
   clifun.call(my_program)
 ```
 
-That's all it takes. Clifun will inspect your function and collect the values it needs it from command line arguments, environment variables, or config files, and then call it.
+That's all it takes. Clifun will inspect your function and collect the values it needs it from command line arguments, environment variables, or config files, and then call it. It does all of this using your type annotations, so it will fail if you have any arguments without a type annotation.
 
 ```
 python examples/function --a 1
