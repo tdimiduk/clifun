@@ -19,6 +19,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    Iterator,
 )
 import types
 
@@ -44,10 +45,12 @@ def call(
         if string_interpreters is not None
         else default_string_interpreters()
     )
+    annotated = annotate_callable(c, interpreters, [])
     provided_inputs = assemble_input_sources(argv)
-    needed_inputs = inputs_for_callable(c, interpreters)
+    needed_inputs = all_needed_inputs(annotated)
     check_usage(provided_inputs, needed_inputs)
-    return call_with_inputs(c, provided_inputs, needed_inputs)
+    resolved_inputs = resolve_inputs(needed_inputs, provided_inputs)
+    return annotated(resolved_inputs)
 
 
 ################################################################################
@@ -150,24 +153,68 @@ class ConfigFiles:
         return default
 
 
-class InputValue(Generic[O]):
+Annotated = Union["AnnotatedParameter", "AnnotatedCallable"]
+
+
+class AnnotatedCallable(Generic[T]):
     def __init__(
-        self,
-        name: str,
-        t: Type[O],
-        convert_from_string: Callable[[str], O],
-        default: O,
-        prefix: Optional[List[str]] = None,
+        self, callable: Callable[[...], T], name: str, needed_inputs: List[Annotated]
     ):
+        self.callable = callable
         self.name = name
-        self.convert_from_string = convert_from_string
-        self.t = t
-        self.default = default
-        self.prefix = [] if prefix is None else prefix
+        self.needed_inputs = needed_inputs
+
+    def __call__(self, inputs: Dict[str, str]):
+        def collect(needed: Annotated):
+            if isinstance(needed, AnnotatedParameter):
+                value = inputs[needed.prefixed_name]
+                if value is None:
+                    if is_optional(needed.t):
+                        return None
+                    raise ValueError(
+                        f"Somehow got None for non optional parameter {needed}"
+                    )
+                return needed(value)
+            return needed(inputs)
+
+        collected_inputs = {
+            needed.name: collect(needed) for needed in self.needed_inputs
+        }
+        return self.callable(**collected_inputs)
+
+    def __str__(self) -> str:
+        return f"<callable: {self.name} {[str(i) for i in self.needed_inputs]}>"
+
+
+class AnnotatedParameter(Generic[T]):
+    def __init__(
+        self, parameter: inspect.Parameter, from_string: Callable[[str], T], prefix
+    ):
+        self.parameter = parameter
+        self.from_string = from_string
+        self.prefix = prefix
+
+    @property
+    def name(self):
+        return self.parameter.name
 
     @property
     def prefixed_name(self):
         return ".".join(self.prefix + [self.name])
+
+    @property
+    def t(self):
+        return self.parameter.annotation
+
+    @property
+    def default(self):
+        return self.parameter.default
+
+    def __call__(self, input: Optional[str]) -> T:
+        return self.from_string(input)
+
+    def __str__(self) -> str:
+        return f"<parameter: {self.name}: {self.t}>"
 
 
 class InputSources:
@@ -179,7 +226,7 @@ class InputSources:
         env_value = os.environ.get(key.upper(), default)
         return self.args.keyword.get(key, self.config_files.get(key, env_value))
 
-    def get_value(self, value: InputValue) -> Union[str, T, None]:
+    def get_value(self, value: AnnotatedParameter) -> Union[str, T, None]:
         return self.get(value.prefixed_name, value.default)
 
 
@@ -188,27 +235,9 @@ class InputSources:
 ################################################################################
 
 
-def call_with_inputs(
-    c: Callable[..., T], provided_inputs: InputSources, needed_inputs: List[InputValue]
-) -> T:
-    return assemble(c, collect_values(needed_inputs, provided_inputs), [])
-
-
 def assemble_input_sources(args: List[str]) -> InputSources:
     args_object = interpret_arguments(args)
     return InputSources(args_object, load_config_files(args_object.positional))
-
-
-def assemble(c: Callable[..., T], collected_values: Dict[str, Any], prefix) -> T:
-    def find(parameter):
-        new_prefix = prefix + [parameter.name]
-        prefixed_name = ".".join(new_prefix)
-        if prefixed_name in collected_values:
-            return collected_values[prefixed_name]
-        return assemble(parameter.annotation, collected_values, new_prefix)
-
-    d: dict = {parameter.name: find(parameter) for parameter in get_parameters(c)}
-    return c(**d)
 
 
 def interpret_arguments(args: Optional[List[str]] = None) -> Arguments:
@@ -246,27 +275,23 @@ def load_config_files(filenames: List[str]) -> ConfigFiles:
 NOT_SPECIFIED = inspect._empty
 
 
-def collect_values(
-    needed_inputs: List[InputValue], provided_inputs: InputSources
-) -> Dict[str, Any]:
+def resolve_inputs(
+    needed_inputs: List[AnnotatedParameter], provided_inputs: InputSources
+) -> Dict[str, Optional[str]]:
     missing = set()
 
-    def get(v):
+    def resolve(v):
         s = provided_inputs.get_value(v)
         if s is None:
             if is_optional(v.t):
                 return None
             else:
-                raise ValueError(
-                    f"Got None for non Optional parameter {v.prefixed_name} of type {v.t}"
-                )
-
+                missing.add(v.prefixed_name)
         if s == NOT_SPECIFIED:
             missing.add(v.prefixed_name)
-            return s
-        return v.convert_from_string(s)
+        return s
 
-    collected = {value.prefixed_name: get(value) for value in needed_inputs}
+    collected = {value.prefixed_name: resolve(value) for value in needed_inputs}
     if missing:
         raise ValueError(f"Missing arguments: {missing}")
     return collected
@@ -282,7 +307,7 @@ def check_usage(provided_inputs, needed_inputs) -> None:
     check_invalid_args(provided_inputs, needed_inputs)
 
 
-def valid_args(values: List[InputValue]) -> Set[str]:
+def valid_args(values: List[AnnotatedParameter]) -> Set[str]:
     return {v.prefixed_name for v in values}
 
 
@@ -310,7 +335,7 @@ def print_usage(needed_inputs):
     print("\n".join(describe_needed(needed_inputs)))
 
 
-def describe_needed(needed_inputs: List[InputValue]) -> List[str]:
+def describe_needed(needed_inputs: List[AnnotatedParameter]) -> List[str]:
     def desc(v):
         base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
         if v.default != NOT_SPECIFIED:
@@ -326,46 +351,18 @@ def describe_needed(needed_inputs: List[InputValue]) -> List[str]:
 ################################################################################
 
 
-def inputs_for_parameter(
-    parameter, interpreter, prefix: List[str]
-) -> Iterable[InputValue]:
-    if parameter.annotation == NOT_SPECIFIED:
-        raise Exception(f"Missing type annotation for {parameter}")
-    t = unwrap_optional(parameter.annotation)
-    if t in interpreter:
-        # We have found a "basic" value we know how to interpret
-        return [
-            InputValue(
-                name=parameter.name,
-                t=parameter.annotation,
-                convert_from_string=interpreter[t],
-                default=parameter.default,
-                prefix=prefix,
-            )
-        ]
+def all_needed_inputs(c: AnnotatedCallable) -> List[AnnotatedParameter]:
+    def inner():
+        for needed in c.needed_inputs:
+            if isinstance(needed, AnnotatedParameter):
+                yield needed
+            else:
+                yield from all_needed_inputs(needed)
 
-    # This is some kind of composite
-    prefix = prefix + [parameter.name]
-    return itertools.chain(
-        *(
-            inputs_for_parameter(parameter, interpreter, prefix)
-            for parameter in get_parameters(t)
-        )
-    )
+    return list(inner())
 
 
-def inputs_for_callable(c: Callable, interpreter) -> List[InputValue]:
-    return list(
-        itertools.chain(
-            *(
-                inputs_for_parameter(parameter, interpreter, [])
-                for parameter in get_parameters(c)
-            )
-        )
-    )
-
-
-def get_parameters(t: Type[T]) -> Iterable[inspect.Parameter]:
+def inspect_parameters(t: Type[T]) -> Iterable[inspect.Parameter]:
     return inspect.signature(t).parameters.values()
 
 
@@ -394,25 +391,56 @@ def type_to_string(t: Type[O]) -> str:
         return f"Optional[{unwrap_optional(t).__name__}]"
     return t.__name__
 
+
+def annotate_parameter(
+    parameter: inspect.Parameter, interpreter: StringInterpreters, prefix: List[str]
+) -> Union[AnnotatedParameter, AnnotatedCallable]:
+    if parameter.annotation == NOT_SPECIFIED:
+        raise Exception(f"Missing type annotation for {parameter}")
+    t = unwrap_optional(parameter.annotation)
+    if t in interpreter:
+        # We have found a "basic" value we know how to interpret
+        return AnnotatedParameter(parameter, from_string=interpreter[t], prefix=prefix)
+
+    # This is some kind of composite
+    prefix = prefix + [parameter.name]
+    return annotate_callable(parameter.annotation, interpreter, prefix, parameter.name)
+
+
+def annotate_callable(
+    callable: Callable[[...], T],
+    interpreter: StringInterpreters,
+    prefix: List[str],
+    name: Optional[str] = None,
+) -> AnnotatedCallable[T]:
+    needed = [
+        annotate_parameter(p, interpreter, prefix) for p in inspect_parameters(callable)
+    ]
+    return AnnotatedCallable(
+        callable, name if name is not None else callable.__name__, needed
+    )
+
+
 ################################################################################
 # Make clifun.py usable as a script to call functions in any module
 ################################################################################
 
+
 def import_module_by_path(path: pathlib.Path) -> types.ModuleType:
-   spec = importlib.util.spec_from_file_location(target.name, str(target))
-   module = importlib.util.module_from_spec(spec)
-   spec.loader.exec_module(module)
-   return module
+    spec = importlib.util.spec_from_file_location(target.name, str(target))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 if __name__ == "__main__":
-   print(sys.argv)
-   if len(sys.argv) < 3:
-       print("Usage: clifun.py path_to_module function_name ...")
-       sys.exit(1)
-   target = pathlib.Path(sys.argv[1]).resolve()
-   function_name = sys.argv[2]
-   arguments = sys.argv[2:]
-   module = import_module_by_path(target)
-   function = getattr(module, function_name)
-   print(call(function, arguments))
+    print(sys.argv)
+    if len(sys.argv) < 3:
+        print("Usage: clifun.py path_to_module function_name ...")
+        sys.exit(1)
+    target = pathlib.Path(sys.argv[1]).resolve()
+    function_name = sys.argv[2]
+    arguments = sys.argv[2:]
+    module = import_module_by_path(target)
+    function = getattr(module, function_name)
+    print(call(function, arguments))

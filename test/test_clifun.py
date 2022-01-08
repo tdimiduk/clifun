@@ -26,9 +26,10 @@ def test_basic():
 
 
 def test_check_unused():
-    input_args = clifun.inputs_for_callable(
-        basic.Basic, clifun.default_string_interpreters()
+    annotated = clifun.annotate_callable(
+        basic.Basic, clifun.default_string_interpreters(), []
     )
+    input_args = list(clifun.all_needed_inputs(annotated))
     assert clifun.invalid_args(["c", "a"], input_args) == {"c"}
 
 
@@ -49,6 +50,7 @@ def test_function():
     value = clifun.call(function.my_program, args=args)
 
     assert value == (1, "not provided")
+
 
 def test_config_file():
     args = ["test_config", str(examples_dir / "foo.json"), "--c", "1"]
