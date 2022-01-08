@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import sys
+import types
 import typing
 from typing import (
     Any,
@@ -13,15 +14,15 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    Iterator,
     List,
     Optional,
     Set,
+    Tuple,
     Type,
     TypeVar,
     Union,
-    Iterator,
 )
-import types
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -47,9 +48,26 @@ def call(
     )
     annotated = annotate_callable(c, interpreters, [])
     provided_inputs = assemble_input_sources(argv)
+
+    if provided_inputs.args.help:
+        print_usage(annotated, header=True)
+        sys.exit(0)
+
     needed_inputs = all_needed_inputs(annotated)
-    check_usage(provided_inputs, needed_inputs)
-    resolved_inputs = resolve_inputs(needed_inputs, provided_inputs)
+
+    unknown = invalid_args(provided_inputs.args.keyword.keys(), needed_inputs)
+    if unknown:
+        print(f"Unknown arguments: {unknown}")
+        print_usage(annotated)
+        sys.exit(1)
+
+    resolved_inputs, missing_inputs = resolve_inputs(needed_inputs, provided_inputs)
+
+    if missing_inputs:
+        print(f"Missing arguments: {missing_inputs}")
+        print_usage(annotated)
+        sys.exit(1)
+
     return annotated(resolved_inputs)
 
 
@@ -277,7 +295,7 @@ NOT_SPECIFIED = inspect._empty
 
 def resolve_inputs(
     needed_inputs: List[AnnotatedParameter], provided_inputs: InputSources
-) -> Dict[str, Optional[str]]:
+) -> Tuple[Dict[str, Optional[str]], Set[str]]:
     missing = set()
 
     def resolve(v):
@@ -292,9 +310,8 @@ def resolve_inputs(
         return s
 
     collected = {value.prefixed_name: resolve(value) for value in needed_inputs}
-    if missing:
-        raise ValueError(f"Missing arguments: {missing}")
-    return collected
+
+    return collected, missing
 
 
 ################################################################################
@@ -315,22 +332,13 @@ def invalid_args(args, allowed_args):
     return set(args) - valid_args(allowed_args)
 
 
-def check_invalid_args(provided_inputs, needed_inputs):
-    unknown = invalid_args(provided_inputs.args.keyword.keys(), needed_inputs)
-    if unknown:
-        print(f"Unknown arguments: {unknown}")
-        print_usage(needed_inputs)
-        raise ValueError(unknown)
-        sys.exit(1)
-
-
-def check_help(provided_inputs, needed_inputs):
-    if provided_inputs.args.help:
-        print_usage(needed_inputs)
-        sys.exit(0)
-
-
-def print_usage(needed_inputs):
+def print_usage(annotated: AnnotatedCallable, header: bool = False) -> None:
+    needed_inputs = all_needed_inputs(annotated)
+    if header:
+        print(f"{annotated.name}\n")
+        doc = inspect.getdoc(annotated.callable)
+        if doc:
+            print(f"{doc}\n")
     print(f"Usage: {sys.argv[0]} [config_file] [--key: value]")
     print("\n".join(describe_needed(needed_inputs)))
 
