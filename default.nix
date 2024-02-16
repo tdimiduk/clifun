@@ -13,5 +13,6 @@ pkgs.python3Packages.buildPythonApplication {
     isort
     wheel
     build
+    pytest
   ];
 }
