@@ -21,7 +21,7 @@ def test_basic():
     value2 = clifun.call(basic.Basic, args + ["--b", "test"])
     assert value2 == basic.Basic(1, "test")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(SystemExit):
         clifun.call(basic.Basic, ["test_basic", "--b", "test"])
 
 
