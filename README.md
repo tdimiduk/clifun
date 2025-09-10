@@ -47,30 +47,29 @@ Basic(a=1, b='hi')
 `clifun` also supports nested objects (or functions taking complex objects as inputs)
 
 ```
-from typing import Optional
 import datetime as dt
+from dataclasses import dataclass
+from typing import Optional
 
-import attr
+
 import clifun
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class Foo:
     a: dt.datetime
     b: Optional[str] = None
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class Bar:
     f: Foo
     c: int
 
-def my_program(f: Foo, c: int):
-    print(Bar(f, c))
-
 
 if __name__ == "__main__":
-    bar = clifun.call(my_program)
+    bar = clifun.call(Bar)
+    print(bar)
 ```
 
 You specify values for the fields in the nested class by referring to them with a their field name in the outer class

@@ -5,13 +5,8 @@ pkgs.python3Packages.buildPythonApplication {
   src = ./.;
   version = "0.1";
   propagatedBuildInputs = with pkgs.python3Packages; [
-    attrs
-    cattrs
-    ipython
-    mypy
-    black
-    isort
-    wheel
-    build
+    python313
+    uv
+    ruff
   ];
 }

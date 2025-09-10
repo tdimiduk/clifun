@@ -1,9 +1,9 @@
-import attr
+from dataclasses import dataclass
 
 import clifun
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class Basic:
     a: int
     b: str = "not provided"

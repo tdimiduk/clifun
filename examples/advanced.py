@@ -1,18 +1,18 @@
 import datetime as dt
+from dataclasses import dataclass
 from typing import Optional
 
-import attr
 
 import clifun
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class Foo:
     a: dt.datetime
     b: Optional[str] = None
 
 
-@attr.s(auto_attribs=True, frozen=True)
+@dataclass(frozen=True)
 class Bar:
     f: Foo
     c: int

@@ -21,7 +21,7 @@ def test_basic():
     value2 = clifun.call(basic.Basic, args + ["--b", "test"])
     assert value2 == basic.Basic(1, "test")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(SystemExit):
         clifun.call(basic.Basic, ["test_basic", "--b", "test"])
 
 
@@ -63,3 +63,6 @@ def test_config_file():
     value2 = clifun.call(advanced.Bar, args2)
 
     assert value2 == advanced.Bar(advanced.Foo(dt.datetime(2021, 1, 1), "test"), 1)
+
+def test_boolean():
+    args = ["test_boolean", "--a", "t"]
