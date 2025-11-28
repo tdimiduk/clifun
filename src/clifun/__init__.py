@@ -1,39 +1,31 @@
+from dataclasses import dataclass
 import datetime as dt
 import importlib.util
 import inspect
-import itertools
 import json
 import os
 import pathlib
 import sys
 import types
-import typing
 from typing import (
-    Any,
     Callable,
-    Dict,
-    Generic,
     Iterable,
-    Iterator,
-    List,
-    Optional,
     Set,
-    Tuple,
-    Type,
     TypeVar,
     Union,
+    get_origin,
+    get_args,
 )
 
 S = TypeVar("S")
 T = TypeVar("T")
-O = TypeVar("O", Any, None)
-StringInterpreters = Dict[Type[T], Callable[[str], T]]
+StringInterpreters = dict[type[T], Callable[[str], T]]
 
 
-def call(
+def call[T](
     c: Callable[..., T],
-    args: Optional[List[str]] = None,
-    string_interpreters: Optional[StringInterpreters] = None,
+    args: list[str] | None = None,
+    string_interpreters: StringInterpreters | None = None,
 ) -> T:
     """
     Call a function from the command line
@@ -46,6 +38,7 @@ def call(
         if string_interpreters is not None
         else default_string_interpreters()
     )
+    
     annotated = annotate_callable(c, interpreters, [])
     provided_inputs = assemble_input_sources(argv)
 
@@ -87,13 +80,13 @@ def default_string_interpreters() -> StringInterpreters:
     }
 
 
-class InterpretationError(ValueError):
-    def __init__(self, s: str, t: T):
-        self.s = s
-        self.t = t
+@dataclass
+class InterpretationError[T](ValueError):
+    s: str
+    t: type[T]
 
     def __str__(self):
-        return f"Could not interpret '{self.s}' as {self.t}"
+        return f"Could not interpret '{self.s}' as {self.t.__name__}"
 
 
 def interpret_bool(s: str) -> bool:
@@ -114,13 +107,7 @@ def interpret_datetime(s: str) -> dt.datetime:
     """
     Date and time in isoformat
     """
-    if hasattr(dt.datetime, "fromisoformat"):
-        return dt.datetime.fromisoformat(s)
-    else:
-        # for python 3.6 where `fromisoformat` doesn't exist
-        import isodate  # type: ignore
-
-        return isodate.parse_datetime(s)
+    return dt.datetime.fromisoformat(s)
 
 
 def interpret_date(s: str) -> dt.date:
@@ -131,7 +118,7 @@ def interpret_date(s: str) -> dt.date:
 
 
 def interpret_string_as_type(
-    s: str, t: Type[T], type_converters: StringInterpreters
+    s: str, t: type[T], type_converters: StringInterpreters
 ) -> T:
     try:
         return (
@@ -143,28 +130,18 @@ def interpret_string_as_type(
         raise InterpretationError(s, t)
 
 
-################################################################################
-# Data classes
-#
-# these should really be dataclasses, and will be converted when clifun drops compatability
-# with python 3.6
-################################################################################
-
-
+@dataclass
 class Arguments:
-    def __init__(
-        self, positional: List[str], keyword: Dict[str, str], help: bool = False
-    ):
-        self.positional = positional
-        self.keyword = keyword
-        self.help = help
+    positional: list[str]
+    keyword: dict[str, str]
+    help: bool = False
 
 
+@dataclass
 class ConfigFiles:
-    def __init__(self, configs: List[Dict[str, str]]):
-        self.configs = configs
+    configs: list[dict[str, str]]
 
-    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get(self, key: str, default: str | None = None) -> str | None:
         for config in self.configs:
             if key in config:
                 return config[key]
@@ -174,26 +151,25 @@ class ConfigFiles:
 Annotated = Union["AnnotatedParameter", "AnnotatedCallable"]
 
 
-class AnnotatedCallable(Generic[T]):
-    def __init__(
-        self, callable: Callable[[...], T], name: str, needed_inputs: List[Annotated]
-    ):
-        self.callable = callable
-        self.name = name
-        self.needed_inputs = needed_inputs
+@dataclass
+class AnnotatedCallable[T]:
+    callable: Callable[[...], T]
+    name: str
+    needed_inputs: list[Annotated]
 
-    def __call__(self, inputs: Dict[str, str]):
+    def __call__(self, inputs: dict[str, str]):
         def collect(needed: Annotated):
-            if isinstance(needed, AnnotatedParameter):
-                value = inputs[needed.prefixed_name]
-                if value is None:
-                    if is_optional(needed.t):
-                        return None
-                    raise ValueError(
-                        f"Somehow got None for non optional parameter {needed}"
-                    )
-                return needed(value)
-            return needed(inputs)
+            match needed:
+                case AnnotatedParameter(t=t, prefixed_name=prefixed_name) as param:
+                    value = inputs.get(prefixed_name)
+                    if value is None:
+                        if is_optional(t):
+                            return None
+                        else:
+                            raise ValueError(f"Somehow got None for non optional parameter {param}")
+                    return param(value)
+                case AnnotatedCallable() as func:
+                    return func(input)
 
         collected_inputs = {
             needed.name: collect(needed) for needed in self.needed_inputs
@@ -204,13 +180,11 @@ class AnnotatedCallable(Generic[T]):
         return f"<callable: {self.name} {[str(i) for i in self.needed_inputs]}>"
 
 
-class AnnotatedParameter(Generic[T]):
-    def __init__(
-        self, parameter: inspect.Parameter, from_string: Callable[[str], T], prefix
-    ):
-        self.parameter = parameter
-        self.from_string = from_string
-        self.prefix = prefix
+@dataclass
+class AnnotatedParameter[T]:
+    parameter: inspect.Parameter
+    from_string: Callable[[str], T]
+    prefix: str
 
     @property
     def name(self):
@@ -228,19 +202,19 @@ class AnnotatedParameter(Generic[T]):
     def default(self):
         return self.parameter.default
 
-    def __call__(self, input: Optional[str]) -> T:
+    def __call__(self, input: str | None) -> T:
         return self.from_string(input)
 
     def __str__(self) -> str:
         return f"<parameter: {self.name}: {self.t}>"
 
 
+@dataclass
 class InputSources:
-    def __init__(self, args: Arguments, config_files: ConfigFiles):
-        self.args = args
-        self.config_files = config_files
+    args: Arguments
+    config_files: ConfigFiles
 
-    def get(self, key: str, default: Optional[T] = None) -> Union[str, T, None]:
+    def get(self, key: str, default: T | None = None) -> Union[str, T, None]:
         env_value = os.environ.get(key.upper(), default)
         return self.args.keyword.get(key, self.config_files.get(key, env_value))
 
@@ -253,34 +227,35 @@ class InputSources:
 ################################################################################
 
 
-def assemble_input_sources(args: List[str]) -> InputSources:
+def assemble_input_sources(args: list[str]) -> InputSources:
     args_object = interpret_arguments(args)
     return InputSources(args_object, load_config_files(args_object.positional))
 
 
-def interpret_arguments(args: Optional[List[str]] = None) -> Arguments:
+def interpret_arguments(args: list[str] | None = None) -> Arguments:
     if args is None:
         args = sys.argv
-    i = 1
+
+    args_iter = iter(args[1:])
     keyword = {}
     positional = []
-    while i < len(args):
-        arg = args[i]
-        key = arg[2:]
+
+    for arg in args_iter:
         if arg in {"-h", "--help"}:
             return Arguments([], {}, True)
-        if arg[:2] == "--":
-            if len(args) < i + 2:
+        if arg.startswith("--"):
+            key = arg[2:]
+            try:
+                value = next(args_iter)
+                keyword[key] = value
+            except StopIteration:
                 raise ValueError(f"Missing value for argument: {key}")
-            keyword[key] = args[i + 1]
-            i += 2
         else:
-            positional.append(arg)
-            i += 1
-    return Arguments(positional, keyword, not (keyword or positional))
+             positional.append(arg)
+    return Arguments(positional, keyword, False)
 
 
-def load_config_files(filenames: List[str]) -> ConfigFiles:
+def load_config_files(filenames: list[str]) -> ConfigFiles:
     # reverse the order so that later config files override earlier ones
     def load(name):
         if not pathlib.Path(name).exists():
@@ -294,8 +269,8 @@ NOT_SPECIFIED = inspect._empty
 
 
 def resolve_inputs(
-    needed_inputs: List[AnnotatedParameter], provided_inputs: InputSources
-) -> Tuple[Dict[str, Optional[str]], Set[str]]:
+    needed_inputs: list[AnnotatedParameter], provided_inputs: InputSources
+) -> tuple[dict[str, str | None], Set[str]]:
     missing = set()
 
     def resolve(v):
@@ -319,12 +294,7 @@ def resolve_inputs(
 ################################################################################
 
 
-def check_usage(provided_inputs, needed_inputs) -> None:
-    check_help(provided_inputs, needed_inputs)
-    check_invalid_args(provided_inputs, needed_inputs)
-
-
-def valid_args(values: List[AnnotatedParameter]) -> Set[str]:
+def valid_args(values: list[AnnotatedParameter]) -> Set[str]:
     return {v.prefixed_name for v in values}
 
 
@@ -343,7 +313,7 @@ def print_usage(annotated: AnnotatedCallable, header: bool = False) -> None:
     print("\n".join(describe_needed(needed_inputs)))
 
 
-def describe_needed(needed_inputs: List[AnnotatedParameter]) -> List[str]:
+def describe_needed(needed_inputs: list[AnnotatedParameter]) -> list[str]:
     def desc(v):
         base = f" --{v.prefixed_name}: {type_to_string(v.t)}"
         if v.default != NOT_SPECIFIED:
@@ -359,7 +329,7 @@ def describe_needed(needed_inputs: List[AnnotatedParameter]) -> List[str]:
 ################################################################################
 
 
-def all_needed_inputs(c: AnnotatedCallable) -> List[AnnotatedParameter]:
+def all_needed_inputs(c: AnnotatedCallable) -> list[AnnotatedParameter]:
     def inner():
         for needed in c.needed_inputs:
             if isinstance(needed, AnnotatedParameter):
@@ -370,45 +340,35 @@ def all_needed_inputs(c: AnnotatedCallable) -> List[AnnotatedParameter]:
     return list(inner())
 
 
-def inspect_parameters(t: Type[T]) -> Iterable[inspect.Parameter]:
+def inspect_parameters(t: type[T]) -> Iterable[inspect.Parameter]:
     return inspect.signature(t).parameters.values()
 
 
-def is_optional(t: Type[T]) -> bool:
-    return Union[t, None] == t
+def is_optional(t: type[T]) -> bool:
+    return get_origin(t) is types.UnionType and type(None) in get_args(t)
+
+def unwrap_optional(t: type[T]) -> type[T]:
+    if is_optional(t):
+        return get_args(t)[0]
+    return t
 
 
-def unwrap_optional(t: Optional[Type[T]]) -> Type[T]:
-    if hasattr(typing, "get_args"):
-        args = typing.get_args(t)
-        if len(args) == 0:
-            return t
-        else:
-            return args[0]
-    # fallback for python < 3.8. May be brittle since it depends on an `_`'d interface
-    # this should use typing.get_args, but that is not available until python 3.8
-    if type(t) != typing._GenericAlias:
-        return t
-    for s in t.__args__:  # type: ignore
-        if s != type(None):
-            return s
-
-
-def type_to_string(t: Type[O]) -> str:
+def type_to_string[T](t: type[T]) -> str:
     if is_optional(t):
         return f"Optional[{unwrap_optional(t).__name__}]"
     return t.__name__
 
 
 def annotate_parameter(
-    parameter: inspect.Parameter, interpreter: StringInterpreters, prefix: List[str]
-) -> Union[AnnotatedParameter, AnnotatedCallable]:
-    if parameter.annotation == NOT_SPECIFIED:
-        raise Exception(f"Missing type annotation for {parameter}")
-    t = unwrap_optional(parameter.annotation)
-    if t in interpreter:
-        # We have found a "basic" value we know how to interpret
-        return AnnotatedParameter(parameter, from_string=interpreter[t], prefix=prefix)
+    parameter: inspect.Parameter, interpreter: StringInterpreters, prefix: list[str]
+) -> AnnotatedParameter | AnnotatedCallable:
+    if parameter.annotation == inspect.Parameter.empty:
+        raise TypeError(f"Missing type annotation for parameter '{parameter.name}'")
+    unwrapped_type = unwrap_optional(parameter.annotation)
+
+    if unwrapped_type in interpreter:
+        # It's a primitive type we know how to handle
+        return AnnotatedParameter(parameter, from_string=interpreter[unwrapped_type], prefix=prefix)
 
     # This is some kind of composite
     prefix = prefix + [parameter.name]
@@ -418,8 +378,8 @@ def annotate_parameter(
 def annotate_callable(
     callable: Callable[[...], T],
     interpreter: StringInterpreters,
-    prefix: List[str],
-    name: Optional[str] = None,
+    prefix: list[str],
+    name: str | None = None,
 ) -> AnnotatedCallable[T]:
     needed = [
         annotate_parameter(p, interpreter, prefix) for p in inspect_parameters(callable)

@@ -1,5 +1,9 @@
+import clifun
+
+
 def flag_me(a: bool) -> bool:
-    return b
+    return a
+
 
 if __name__ == "__main__":
-    clifun.call(my_program)
+    clifun.call(flag_me)
